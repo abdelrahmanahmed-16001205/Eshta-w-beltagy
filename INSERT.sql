@@ -34,7 +34,6 @@ VALUES
         GETDATE()
     );
 
-kkk
 INSERT INTO
     TaxForm (jurisdiction, validity_period, form_content)
 VALUES
