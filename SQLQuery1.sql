@@ -1,15 +1,21 @@
-﻿CREATE DATABASE HRMS;
+CREATE DATABASE HRMS;
 GO
 
 USE HRMS;
 GO
 
-CREATE TABLE Currency (
-    CurrencyCode VARCHAR(10) PRIMARY KEY,
-    CurrencyName VARCHAR(50) NOT NULL,
-    ExchangeRate DECIMAL(10,4) NOT NULL,
-    CreatedDate DATETIME DEFAULT GETDATE(),
-    LastUpdated DATETIME DEFAULT GETDATE()
+CREATE TABLE Position (
+    position_id INT PRIMARY KEY IDENTITY(1,1),
+    position_title VARCHAR(100) NOT NULL,
+    responsibilities TEXT,
+    status VARCHAR(20) DEFAULT 'Active'
+);
+
+CREATE TABLE PayGrade (
+    pay_grade_id INT PRIMARY KEY IDENTITY(1,1),
+    grade_name VARCHAR(50) NOT NULL,
+    min_salary DECIMAL(10,2) NOT NULL,
+    max_salary DECIMAL(10,2) NOT NULL
 );
 
 CREATE TABLE TaxForm (
@@ -19,13 +25,6 @@ CREATE TABLE TaxForm (
     form_content TEXT NOT NULL
 );
 
-CREATE TABLE Position (
-    position_id INT PRIMARY KEY IDENTITY(1,1),
-    position_title VARCHAR(100) NOT NULL,
-    responsibilities TEXT,
-    status VARCHAR(20) DEFAULT 'Active'
-);
-
 CREATE TABLE Department (
     department_id INT PRIMARY KEY IDENTITY(1,1),
     department_name VARCHAR(100) NOT NULL,
@@ -33,32 +32,12 @@ CREATE TABLE Department (
     department_head_id INT NULL
 );
 
-CREATE TABLE Role (
-    role_id INT PRIMARY KEY IDENTITY(1,1),
-    role_name VARCHAR(100) NOT NULL,
-    purpose TEXT
-);
-
-CREATE TABLE RolePermission (
-    role_id INT NOT NULL,
-    permission_name VARCHAR(100) NOT NULL,
-    allowed_action VARCHAR(100),
-    PRIMARY KEY (role_id, permission_name),
-    FOREIGN KEY (role_id) REFERENCES Role(role_id)
-);
-
-CREATE TABLE Insurance (
-    insurance_id INT PRIMARY KEY IDENTITY(1,1),
-    type VARCHAR(50) NOT NULL,
-    contribution_rate DECIMAL(5,2) NOT NULL,
-    coverage TEXT NOT NULL
-);
-
-CREATE TABLE PayGrade (
-    pay_grade_id INT PRIMARY KEY IDENTITY(1,1),
-    grade_name VARCHAR(50) NOT NULL,
-    min_salary DECIMAL(10,2) NOT NULL,
-    max_salary DECIMAL(10,2) NOT NULL
+CREATE TABLE Currency (
+    CurrencyCode VARCHAR(10) PRIMARY KEY,
+    CurrencyName VARCHAR(50) NOT NULL,
+    ExchangeRate DECIMAL(10,4) NOT NULL,
+    CreatedDate DATETIME DEFAULT GETDATE(),
+    LastUpdated DATETIME DEFAULT GETDATE()
 );
 
 CREATE TABLE SalaryType (
@@ -69,25 +48,11 @@ CREATE TABLE SalaryType (
     FOREIGN KEY (currency) REFERENCES Currency(CurrencyCode)
 );
 
-CREATE TABLE HourlySalaryType (
-    salary_type_id INT PRIMARY KEY,
-    hourly_rate DECIMAL(10,2) NOT NULL,
-    max_monthly_hours INT NOT NULL,
-    FOREIGN KEY (salary_type_id) REFERENCES SalaryType(salary_type_id)
-);
-
-CREATE TABLE MonthlySalaryType (
-    salary_type_id INT PRIMARY KEY,
-    tax_rule TEXT NOT NULL,
-    contribution_scheme TEXT NOT NULL,
-    FOREIGN KEY (salary_type_id) REFERENCES SalaryType(salary_type_id)
-);
-
-CREATE TABLE ContractSalaryType (
-    salary_type_id INT PRIMARY KEY,
-    contract_value DECIMAL(10,2) NOT NULL,
-    installment_details TEXT NOT NULL,
-    FOREIGN KEY (salary_type_id) REFERENCES SalaryType(salary_type_id)
+CREATE TABLE Insurance (
+    insurance_id INT PRIMARY KEY IDENTITY(1,1),
+    type VARCHAR(50) NOT NULL,
+    contribution_rate DECIMAL(5,2) NOT NULL,
+    coverage TEXT NOT NULL
 );
 
 CREATE TABLE Contract (
@@ -98,37 +63,6 @@ CREATE TABLE Contract (
     current_state VARCHAR(50) NOT NULL,
     insurance_id INT NULL,
     FOREIGN KEY (insurance_id) REFERENCES Insurance(insurance_id)
-);
-
-CREATE TABLE FullTimeContract (
-    contract_id INT PRIMARY KEY,
-    leave_entitlement INT NOT NULL,
-    insurance_eligibility VARCHAR(100),
-    weekly_working_hours INT NOT NULL,
-    FOREIGN KEY (contract_id) REFERENCES Contract(contract_id)
-);
-
-CREATE TABLE PartTimeContract (
-    contract_id INT PRIMARY KEY,
-    working_hours INT NOT NULL,
-    hourly_rate DECIMAL(10,2) NOT NULL,
-    FOREIGN KEY (contract_id) REFERENCES Contract(contract_id)
-);
-
-CREATE TABLE ConsultantContract (
-    contract_id INT PRIMARY KEY,
-    project_scope TEXT NOT NULL,
-    fees DECIMAL(10,2) NOT NULL,
-    payment_schedule VARCHAR(100),
-    FOREIGN KEY (contract_id) REFERENCES Contract(contract_id)
-);
-
-CREATE TABLE InternshipContract (
-    contract_id INT PRIMARY KEY,
-    mentoring VARCHAR(100),
-    evaluation TEXT,
-    stipend_related DECIMAL(10,2),
-    FOREIGN KEY (contract_id) REFERENCES Contract(contract_id)
 );
 
 CREATE TABLE Employee (
@@ -234,6 +168,12 @@ CREATE TABLE Employee_Verification (
     FOREIGN KEY (verification_id) REFERENCES Verification(verification_id)
 );
 
+CREATE TABLE Role (
+    role_id INT PRIMARY KEY IDENTITY(1,1),
+    role_name VARCHAR(100) NOT NULL,
+    purpose TEXT
+);
+
 CREATE TABLE Employee_Role (
     employee_id INT NOT NULL,
     role_id INT NOT NULL,
@@ -241,6 +181,75 @@ CREATE TABLE Employee_Role (
     PRIMARY KEY (employee_id, role_id),
     FOREIGN KEY (employee_id) REFERENCES Employee(employee_id),
     FOREIGN KEY (role_id) REFERENCES Role(role_id)
+);
+
+CREATE TABLE RolePermission (
+    role_id INT NOT NULL,
+    permission_name VARCHAR(100) NOT NULL,
+    allowed_action VARCHAR(100),
+    PRIMARY KEY (role_id, permission_name),
+    FOREIGN KEY (role_id) REFERENCES Role(role_id)
+);
+
+CREATE TABLE FullTimeContract (
+    contract_id INT PRIMARY KEY,
+    leave_entitlement INT NOT NULL,
+    insurance_eligibility VARCHAR(100),
+    weekly_working_hours INT NOT NULL,
+    FOREIGN KEY (contract_id) REFERENCES Contract(contract_id)
+);
+
+CREATE TABLE PartTimeContract (
+    contract_id INT PRIMARY KEY,
+    working_hours INT NOT NULL,
+    hourly_rate DECIMAL(10,2) NOT NULL,
+    FOREIGN KEY (contract_id) REFERENCES Contract(contract_id)
+);
+
+CREATE TABLE ConsultantContract (
+    contract_id INT PRIMARY KEY,
+    project_scope TEXT NOT NULL,
+    fees DECIMAL(10,2) NOT NULL,
+    payment_schedule VARCHAR(100),
+    FOREIGN KEY (contract_id) REFERENCES Contract(contract_id)
+);
+
+CREATE TABLE InternshipContract (
+    contract_id INT PRIMARY KEY,
+    mentoring VARCHAR(100),
+    evaluation TEXT,
+    stipend_related DECIMAL(10,2),
+    FOREIGN KEY (contract_id) REFERENCES Contract(contract_id)
+);
+
+CREATE TABLE Termination (
+    termination_id INT PRIMARY KEY IDENTITY(1,1),
+    date DATE NOT NULL,
+    reason TEXT NOT NULL,
+    contract_id INT NOT NULL,
+    FOREIGN KEY (contract_id) REFERENCES Contract(contract_id)
+);
+
+CREATE TABLE Reimbursement (
+    reimbursement_id INT PRIMARY KEY IDENTITY(1,1),
+    type VARCHAR(50) NOT NULL,
+    claim_type VARCHAR(50) NOT NULL,
+    approval_date DATE,
+    current_status VARCHAR(50) NOT NULL,
+    employee_id INT NOT NULL,
+    FOREIGN KEY (employee_id) REFERENCES Employee(employee_id)
+);
+
+CREATE TABLE Mission (
+    mission_id INT PRIMARY KEY IDENTITY(1,1),
+    destination VARCHAR(50) NOT NULL,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    status VARCHAR(50) NOT NULL,
+    employee_id INT NOT NULL,
+    manager_id INT NOT NULL,
+    FOREIGN KEY (employee_id) REFERENCES Employee(employee_id),
+    FOREIGN KEY (manager_id) REFERENCES Employee(employee_id)
 );
 
 CREATE TABLE Leave (
@@ -351,21 +360,6 @@ CREATE TABLE ShiftAssignment (
     FOREIGN KEY (exception_id) REFERENCES Exception(exception_id)
 );
 
-CREATE TABLE ShiftCycle (
-    cycle_id INT PRIMARY KEY IDENTITY(1,1),
-    cycle_name VARCHAR(50) NOT NULL,
-    description TEXT
-);
-
-CREATE TABLE ShiftCycleAssignment (
-    cycle_id INT NOT NULL,
-    shift_id INT NOT NULL,
-    order_number INT NOT NULL,
-    PRIMARY KEY (cycle_id, shift_id),
-    FOREIGN KEY (cycle_id) REFERENCES ShiftCycle(cycle_id),
-    FOREIGN KEY (shift_id) REFERENCES ShiftSchedule(shift_id)
-);
-
 CREATE TABLE Employee_Exception (
     employee_id INT NOT NULL,
     exception_id INT NOT NULL,
@@ -435,6 +429,21 @@ CREATE TABLE AttendanceSource (
     FOREIGN KEY (device_id) REFERENCES Device(device_id)
 );
 
+CREATE TABLE ShiftCycle (
+    cycle_id INT PRIMARY KEY IDENTITY(1,1),
+    cycle_name VARCHAR(50) NOT NULL,
+    description TEXT
+);
+
+CREATE TABLE ShiftCycleAssignment (
+    cycle_id INT NOT NULL,
+    shift_id INT NOT NULL,
+    order_number INT NOT NULL,
+    PRIMARY KEY (cycle_id, shift_id),
+    FOREIGN KEY (cycle_id) REFERENCES ShiftCycle(cycle_id),
+    FOREIGN KEY (shift_id) REFERENCES ShiftSchedule(shift_id)
+);
+
 CREATE TABLE Payroll (
     payroll_id INT PRIMARY KEY IDENTITY(1,1),
     employee_id INT NOT NULL,
@@ -448,6 +457,27 @@ CREATE TABLE Payroll (
     net_salary DECIMAL(10,2) NOT NULL,
     payment_date DATE,
     FOREIGN KEY (employee_id) REFERENCES Employee(employee_id)
+);
+
+CREATE TABLE HourlySalaryType (
+    salary_type_id INT PRIMARY KEY,
+    hourly_rate DECIMAL(10,2) NOT NULL,
+    max_monthly_hours INT NOT NULL,
+    FOREIGN KEY (salary_type_id) REFERENCES SalaryType(salary_type_id)
+);
+
+CREATE TABLE MonthlySalaryType (
+    salary_type_id INT PRIMARY KEY,
+    tax_rule TEXT NOT NULL,
+    contribution_scheme TEXT NOT NULL,
+    FOREIGN KEY (salary_type_id) REFERENCES SalaryType(salary_type_id)
+);
+
+CREATE TABLE ContractSalaryType (
+    salary_type_id INT PRIMARY KEY,
+    contract_value DECIMAL(10,2) NOT NULL,
+    installment_details TEXT NOT NULL,
+    FOREIGN KEY (salary_type_id) REFERENCES SalaryType(salary_type_id)
 );
 
 CREATE TABLE AllowanceDeduction (
@@ -544,36 +574,6 @@ CREATE TABLE Employee_Notification (
     PRIMARY KEY (employee_id, notification_id),
     FOREIGN KEY (employee_id) REFERENCES Employee(employee_id),
     FOREIGN KEY (notification_id) REFERENCES Notification(notification_id)
-);
-
-CREATE TABLE Mission (
-    mission_id INT PRIMARY KEY IDENTITY(1,1),
-    destination VARCHAR(50) NOT NULL,
-    start_date DATE NOT NULL,
-    end_date DATE NOT NULL,
-    status VARCHAR(50) NOT NULL,
-    employee_id INT NOT NULL,
-    manager_id INT NOT NULL,
-    FOREIGN KEY (employee_id) REFERENCES Employee(employee_id),
-    FOREIGN KEY (manager_id) REFERENCES Employee(employee_id)
-);
-
-CREATE TABLE Reimbursement (
-    reimbursement_id INT PRIMARY KEY IDENTITY(1,1),
-    type VARCHAR(50) NOT NULL,
-    claim_type VARCHAR(50) NOT NULL,
-    approval_date DATE,
-    current_status VARCHAR(50) NOT NULL,
-    employee_id INT NOT NULL,
-    FOREIGN KEY (employee_id) REFERENCES Employee(employee_id)
-);
-
-CREATE TABLE Termination (
-    termination_id INT PRIMARY KEY IDENTITY(1,1),
-    date DATE NOT NULL,
-    reason TEXT NOT NULL,
-    contract_id INT NOT NULL,
-    FOREIGN KEY (contract_id) REFERENCES Contract(contract_id)
 );
 
 CREATE TABLE EmployeeHierarchy (
