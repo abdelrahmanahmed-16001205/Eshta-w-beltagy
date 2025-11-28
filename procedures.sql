@@ -10,11 +10,30 @@ END;
 GO
 
 CREATE PROCEDURE AddEmployee
-    @FullName VARCHAR(100),
+    @FullName VARCHAR(200),
+    @NationalID VARCHAR(50),
+    @DateOfBirth DATE,
+    @CountryOfBirth VARCHAR(100),
+    @Phone VARCHAR(50),
     @Email VARCHAR(100),
+    @Address VARCHAR(255),
+    @EmergencyContactName VARCHAR(100),
+    @EmergencyContactPhone VARCHAR(50),
+    @Relationship VARCHAR(50),
+    @Biography VARCHAR(MAX),
+    @EmploymentProgress VARCHAR(100),
+    @AccountStatus VARCHAR(50),
+    @EmploymentStatus VARCHAR(50),
+    @HireDate DATE,
+    @IsActive BIT,
+    @ProfileCompletion INT,
     @DepartmentID INT,
     @PositionID INT,
-    @HireDate DATE,
+    @ManagerID INT,
+    @ContractID INT,
+    @TaxFormID INT,
+    @SalaryTypeID INT,
+    @PayGrade VARCHAR(50),
     @EmployeeID INT OUTPUT
 AS
 BEGIN
@@ -31,6 +50,12 @@ BEGIN
             RETURN;
         END
         
+        IF @NationalID IS NOT NULL AND EXISTS (SELECT 1 FROM Employee WHERE national_id = @NationalID)
+        BEGIN
+            SELECT 'National ID already exists' AS Message;
+            RETURN;
+        END
+        
         IF NOT EXISTS (SELECT 1 FROM Department WHERE department_id = @DepartmentID)
         BEGIN
             SELECT 'Department not found' AS Message;
@@ -40,6 +65,12 @@ BEGIN
         IF NOT EXISTS (SELECT 1 FROM Position WHERE position_id = @PositionID)
         BEGIN
             SELECT 'Position not found' AS Message;
+            RETURN;
+        END
+        
+        IF @ManagerID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @ManagerID)
+        BEGIN
+            SELECT 'Manager not found' AS Message;
             RETURN;
         END
         
@@ -58,8 +89,14 @@ BEGIN
         
         BEGIN TRANSACTION;
         
-        INSERT INTO Employee (first_name, last_name, email, department_id, position_id, hire_date)
-        VALUES (@FirstName, @LastName, @Email, @DepartmentID, @PositionID, @HireDate);
+        INSERT INTO Employee (first_name, last_name, national_id, date_of_birth, country_of_birth, phone, email, address, 
+                              emergency_contact_name, emergency_contact_phone, relationship, biography, employment_progress,
+                              account_status, employment_status, hire_date, is_active, profile_completion, department_id, 
+                              position_id, manager_id, contract_id, tax_form_id, salary_type_id, pay_grade)
+        VALUES (@FirstName, @LastName, @NationalID, @DateOfBirth, @CountryOfBirth, @Phone, @Email, @Address,
+                @EmergencyContactName, @EmergencyContactPhone, @Relationship, @Biography, @EmploymentProgress,
+                @AccountStatus, @EmploymentStatus, @HireDate, @IsActive, @ProfileCompletion, @DepartmentID,
+                @PositionID, @ManagerID, @ContractID, @TaxFormID, @SalaryTypeID, @PayGrade);
         
         SET @EmployeeID = SCOPE_IDENTITY();
         
@@ -129,14 +166,47 @@ CREATE PROCEDURE ReassignHierarchy
     @NewManagerID INT
 AS
 BEGIN
-    UPDATE Employee 
-    SET department_id = @NewDepartmentID, manager_id = @NewManagerID 
-    WHERE employee_id = @EmployeeID;
-    
-    IF EXISTS (SELECT 1 FROM EmployeeHierarchy WHERE employee_id = @EmployeeID)
-        UPDATE EmployeeHierarchy SET manager_id = @NewManagerID WHERE employee_id = @EmployeeID;
-    
-    SELECT 'Employee hierarchy updated successfully' AS Message;
+    BEGIN TRY
+        IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
+        BEGIN
+            SELECT 'Employee not found' AS Message;
+            RETURN;
+        END
+        
+        IF NOT EXISTS (SELECT 1 FROM Department WHERE department_id = @NewDepartmentID)
+        BEGIN
+            SELECT 'Department not found' AS Message;
+            RETURN;
+        END
+        
+        IF @NewManagerID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @NewManagerID)
+        BEGIN
+            SELECT 'Manager not found' AS Message;
+            RETURN;
+        END
+        
+        IF @EmployeeID = @NewManagerID
+        BEGIN
+            SELECT 'Employee cannot be their own manager' AS Message;
+            RETURN;
+        END
+        
+        BEGIN TRANSACTION;
+        
+        UPDATE Employee 
+        SET department_id = @NewDepartmentID, manager_id = @NewManagerID 
+        WHERE employee_id = @EmployeeID;
+        
+        IF EXISTS (SELECT 1 FROM EmployeeHierarchy WHERE employee_id = @EmployeeID)
+            UPDATE EmployeeHierarchy SET manager_id = @NewManagerID WHERE employee_id = @EmployeeID;
+        
+        COMMIT TRANSACTION;
+        SELECT 'Employee hierarchy updated successfully' AS Message;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
+    END CATCH
 END;
 GO
 
@@ -165,8 +235,6 @@ END;
 GO
 
 CREATE PROCEDURE ViewOrgHierarchy
-    @AffectedEmployees VARCHAR(500),
-    @Message VARCHAR(200)
 AS
 BEGIN
     SELECT 
@@ -332,17 +400,48 @@ END;
 GO
 
 CREATE PROCEDURE ApplyHolidayOverrides
-    @HolidayID INT
+    @HolidayID INT,
+    @EmployeeID INT
 AS
 BEGIN
-    DECLARE @HolidayDate DATE;
-    SELECT @HolidayDate = date FROM Exception WHERE exception_id = @HolidayID;
-    
-    UPDATE Attendance 
-    SET exception_id = @HolidayID
-    WHERE CAST(entry_time AS DATE) = @HolidayDate AND exception_id IS NULL;
-    
-    SELECT 'Holiday overrides applied to shifts' AS Message;
+    BEGIN TRY
+        IF NOT EXISTS (SELECT 1 FROM Exception WHERE exception_id = @HolidayID)
+        BEGIN
+            SELECT 'Holiday not found' AS Message;
+            RETURN;
+        END
+        
+        IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
+        BEGIN
+            SELECT 'Employee not found' AS Message;
+            RETURN;
+        END
+        
+        DECLARE @HolidayDate DATE;
+        SELECT @HolidayDate = date FROM Exception WHERE exception_id = @HolidayID;
+        
+        BEGIN TRANSACTION;
+        
+        UPDATE Attendance 
+        SET exception_id = @HolidayID
+        WHERE employee_id = @EmployeeID 
+        AND CAST(entry_time AS DATE) = @HolidayDate 
+        AND exception_id IS NULL;
+        
+        IF @@ROWCOUNT = 0
+        BEGIN
+            ROLLBACK TRANSACTION;
+            SELECT 'No attendance records found for this employee on the holiday date' AS Message;
+            RETURN;
+        END
+        
+        COMMIT TRANSACTION;
+        SELECT 'Holiday overrides applied successfully' AS Message;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
+    END CATCH
 END;
 GO
 
@@ -370,16 +469,43 @@ CREATE PROCEDURE CreateContract
     @EndDate DATE
 AS
 BEGIN
-    DECLARE @ContractID INT;
-    
-    INSERT INTO Contract (type, start_date, end_date, current_state)
-    VALUES (@Type, @StartDate, @EndDate, 'Active');
-    
-    SET @ContractID = SCOPE_IDENTITY();
-    
-    UPDATE Employee SET contract_id = @ContractID WHERE employee_id = @EmployeeID;
-    
-    SELECT 'Contract created successfully' AS Message;
+    BEGIN TRY
+        IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
+        BEGIN
+            SELECT 'Employee not found' AS Message;
+            RETURN;
+        END
+        
+        IF @StartDate > @EndDate AND @EndDate IS NOT NULL
+        BEGIN
+            SELECT 'Start date cannot be after end date' AS Message;
+            RETURN;
+        END
+        
+        IF @Type NOT IN ('Full-Time', 'Part-Time', 'Consultant', 'Internship')
+        BEGIN
+            SELECT 'Invalid contract type' AS Message;
+            RETURN;
+        END
+        
+        BEGIN TRANSACTION;
+        
+        DECLARE @ContractID INT;
+        
+        INSERT INTO Contract (type, start_date, end_date, current_state)
+        VALUES (@Type, @StartDate, @EndDate, 'Active');
+        
+        SET @ContractID = SCOPE_IDENTITY();
+        
+        UPDATE Employee SET contract_id = @ContractID WHERE employee_id = @EmployeeID;
+        
+        COMMIT TRANSACTION;
+        SELECT 'Contract created successfully' AS Message;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
+    END CATCH
 END;
 GO
 
@@ -553,19 +679,61 @@ CREATE PROCEDURE CreateEmployeeProfile
     @RoleID INT,
     @HireDate DATE,
     @Email VARCHAR(100),
-    @Phone VARCHAR(20)
+    @Phone VARCHAR(20),
+    @NationalID VARCHAR(50),
+    @DateOfBirth DATE,
+    @CountryOfBirth VARCHAR(100)
 AS
 BEGIN
-    DECLARE @EmployeeID INT;
-    
-    INSERT INTO Employee (first_name, last_name, email, phone, department_id, hire_date)
-    VALUES (@FirstName, @LastName, @Email, @Phone, @DepartmentID, @HireDate);
-    
-    SET @EmployeeID = SCOPE_IDENTITY();
-    
-    INSERT INTO Employee_Role (employee_id, role_id) VALUES (@EmployeeID, @RoleID);
-    
-    SELECT 'Employee profile created with ID: ' + CAST(@EmployeeID AS VARCHAR) AS Message, @EmployeeID AS EmployeeID;
+    BEGIN TRY
+        IF @FirstName IS NULL OR @LastName IS NULL OR @Email IS NULL OR @HireDate IS NULL
+        BEGIN
+            SELECT 'Required fields cannot be null' AS Message;
+            RETURN;
+        END
+        
+        IF EXISTS (SELECT 1 FROM Employee WHERE email = @Email)
+        BEGIN
+            SELECT 'Email already exists' AS Message;
+            RETURN;
+        END
+        
+        IF @NationalID IS NOT NULL AND EXISTS (SELECT 1 FROM Employee WHERE national_id = @NationalID)
+        BEGIN
+            SELECT 'National ID already exists' AS Message;
+            RETURN;
+        END
+        
+        IF NOT EXISTS (SELECT 1 FROM Department WHERE department_id = @DepartmentID)
+        BEGIN
+            SELECT 'Department not found' AS Message;
+            RETURN;
+        END
+        
+        IF NOT EXISTS (SELECT 1 FROM Role WHERE role_id = @RoleID)
+        BEGIN
+            SELECT 'Role not found' AS Message;
+            RETURN;
+        END
+        
+        BEGIN TRANSACTION;
+        
+        DECLARE @EmployeeID INT;
+        
+        INSERT INTO Employee (first_name, last_name, national_id, date_of_birth, country_of_birth, email, phone, department_id, hire_date)
+        VALUES (@FirstName, @LastName, @NationalID, @DateOfBirth, @CountryOfBirth, @Email, @Phone, @DepartmentID, @HireDate);
+        
+        SET @EmployeeID = SCOPE_IDENTITY();
+        
+        INSERT INTO Employee_Role (employee_id, role_id) VALUES (@EmployeeID, @RoleID);
+        
+        COMMIT TRANSACTION;
+        SELECT 'Employee profile created with ID: ' + CAST(@EmployeeID AS VARCHAR) AS Message, @EmployeeID AS EmployeeID;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
+    END CATCH
 END;
 GO
 
@@ -612,11 +780,52 @@ END;
 GO
 
 CREATE PROCEDURE CreateShiftType
-    @ShiftTypeName VARCHAR(50),
-    @Description VARCHAR(200)
+    @ShiftID INT,
+    @Name VARCHAR(100),
+    @Type VARCHAR(50),
+    @Start_Time TIME,
+    @End_Time TIME,
+    @Break_Duration INT,
+    @Shift_Date DATE,
+    @Status VARCHAR(50)
 AS
 BEGIN
-    SELECT 'Shift type "' + @ShiftTypeName + '" created successfully' AS Message;
+    BEGIN TRY
+        IF @Name IS NULL OR @Type IS NULL OR @Start_Time IS NULL OR @End_Time IS NULL
+        BEGIN
+            SELECT 'Required fields cannot be null' AS Message;
+            RETURN;
+        END
+        
+        IF EXISTS (SELECT 1 FROM ShiftSchedule WHERE shift_id = @ShiftID)
+        BEGIN
+            SELECT 'Shift ID already exists' AS Message;
+            RETURN;
+        END
+        
+        IF @Start_Time >= @End_Time
+        BEGIN
+            SELECT 'Start time must be before end time' AS Message;
+            RETURN;
+        END
+        
+        BEGIN TRANSACTION;
+        
+        SET IDENTITY_INSERT ShiftSchedule ON;
+        
+        INSERT INTO ShiftSchedule (shift_id, name, type, start_time, end_time, break_duration, shift_date, status)
+        VALUES (@ShiftID, @Name, @Type, @Start_Time, @End_Time, @Break_Duration, @Shift_Date, @Status);
+        
+        SET IDENTITY_INSERT ShiftSchedule OFF;
+        
+        COMMIT TRANSACTION;
+        SELECT 'Shift type created successfully' AS Message;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        SET IDENTITY_INSERT ShiftSchedule OFF;
+        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
+    END CATCH
 END;
 GO
 
@@ -635,12 +844,63 @@ GO
 
 CREATE PROCEDURE AssignRotationalShift
     @EmployeeID INT,
-    @ShiftCycle VARCHAR(50),
+    @ShiftCycle INT,
     @StartDate DATE,
-    @EndDate DATE
+    @EndDate DATE,
+    @Status VARCHAR(20)
 AS
 BEGIN
-    SELECT 'Rotational shift assigned successfully' AS Message;
+    BEGIN TRY
+        IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
+        BEGIN
+            SELECT 'Employee not found' AS Message;
+            RETURN;
+        END
+        
+        IF NOT EXISTS (SELECT 1 FROM ShiftCycle WHERE cycle_id = @ShiftCycle)
+        BEGIN
+            SELECT 'Shift cycle not found' AS Message;
+            RETURN;
+        END
+        
+        IF @StartDate > @EndDate
+        BEGIN
+            SELECT 'Start date cannot be after end date' AS Message;
+            RETURN;
+        END
+        
+        BEGIN TRANSACTION;
+        
+        DECLARE @ShiftID INT;
+        DECLARE cycle_cursor CURSOR FOR
+        SELECT shift_id FROM ShiftCycleAssignment WHERE cycle_id = @ShiftCycle ORDER BY order_number;
+        
+        OPEN cycle_cursor;
+        FETCH NEXT FROM cycle_cursor INTO @ShiftID;
+        
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            INSERT INTO ShiftAssignment (employee_id, shift_id, start_date, end_date, status)
+            VALUES (@EmployeeID, @ShiftID, @StartDate, @EndDate, @Status);
+            
+            FETCH NEXT FROM cycle_cursor INTO @ShiftID;
+        END
+        
+        CLOSE cycle_cursor;
+        DEALLOCATE cycle_cursor;
+        
+        COMMIT TRANSACTION;
+        SELECT 'Rotational shift assigned successfully' AS Message;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        IF CURSOR_STATUS('global','cycle_cursor') >= -1
+        BEGIN
+            CLOSE cycle_cursor;
+            DEALLOCATE cycle_cursor;
+        END
+        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
+    END CATCH
 END;
 GO
 
@@ -990,11 +1250,70 @@ BEGIN
 END;
 GO
 
-CREATE PROCEDURE SyncLeaveToPayroll
+CREATE PROCEDURE SyncLeaveToattendance
     @LeaveRequestID INT
 AS
 BEGIN
-    SELECT 'Leave synced to payroll system' AS Message;
+    BEGIN TRY
+        IF NOT EXISTS (SELECT 1 FROM LeaveRequest WHERE request_id = @LeaveRequestID)
+        BEGIN
+            SELECT 'Leave request not found' AS Message;
+            RETURN;
+        END
+        
+        DECLARE @EmployeeID INT, @LeaveID INT, @Duration INT, @Status VARCHAR(50);
+        
+        SELECT @EmployeeID = employee_id, @LeaveID = leave_id, @Duration = duration, @Status = status
+        FROM LeaveRequest WHERE request_id = @LeaveRequestID;
+        
+        IF @Status <> 'Approved'
+        BEGIN
+            SELECT 'Leave request must be approved before syncing to attendance' AS Message;
+            RETURN;
+        END
+        
+        DECLARE @LeaveStartDate DATE = GETDATE();
+        DECLARE @LeaveEndDate DATE = DATEADD(DAY, @Duration - 1, @LeaveStartDate);
+        
+        IF NOT EXISTS (SELECT 1 FROM Exception WHERE category = 'Leave' AND date BETWEEN @LeaveStartDate AND @LeaveEndDate)
+        BEGIN
+            BEGIN TRANSACTION;
+            
+            DECLARE @CurrentDate DATE = @LeaveStartDate;
+            DECLARE @ExceptionID INT;
+            
+            WHILE @CurrentDate <= @LeaveEndDate
+            BEGIN
+                INSERT INTO Exception (name, category, date, status)
+                VALUES ('Leave Exception - Request #' + CAST(@LeaveRequestID AS VARCHAR), 'Leave', @CurrentDate, 'Active');
+                
+                SET @ExceptionID = SCOPE_IDENTITY();
+                
+                INSERT INTO Employee_Exception (employee_id, exception_id)
+                VALUES (@EmployeeID, @ExceptionID);
+                
+                IF EXISTS (SELECT 1 FROM Attendance WHERE employee_id = @EmployeeID AND CAST(entry_time AS DATE) = @CurrentDate)
+                BEGIN
+                    UPDATE Attendance 
+                    SET exception_id = @ExceptionID
+                    WHERE employee_id = @EmployeeID AND CAST(entry_time AS DATE) = @CurrentDate;
+                END
+                
+                SET @CurrentDate = DATEADD(DAY, 1, @CurrentDate);
+            END
+            
+            COMMIT TRANSACTION;
+            SELECT 'Leave synced to attendance successfully' AS Message;
+        END
+        ELSE
+        BEGIN
+            SELECT 'Exception already exists for this leave period' AS Message;
+        END
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
+    END CATCH
 END;
 GO
 
@@ -1042,16 +1361,42 @@ GO
 CREATE PROCEDURE AdjustPayrollItem
     @PayrollID INT,
     @Type VARCHAR(50),
-    @Amount DECIMAL(10,2)
+    @Amount DECIMAL(10,2),
+    @Duration INT,
+    @Timezone VARCHAR(20)
 AS
 BEGIN
-    DECLARE @EmployeeID INT;
-    SELECT @EmployeeID = employee_id FROM Payroll WHERE payroll_id = @PayrollID;
-    
-    INSERT INTO AllowanceDeduction (payroll_id, employee_id, type, amount, currency)
-    VALUES (@PayrollID, @EmployeeID, @Type, @Amount, 'USD');
-    
-    SELECT 'Payroll item adjusted successfully' AS Message;
+    BEGIN TRY
+        IF NOT EXISTS (SELECT 1 FROM Payroll WHERE payroll_id = @PayrollID)
+        BEGIN
+            SELECT 'Payroll record not found' AS Message;
+            RETURN;
+        END
+        
+        IF @Amount = 0
+        BEGIN
+            SELECT 'Amount cannot be zero' AS Message;
+            RETURN;
+        END
+        
+        DECLARE @EmployeeID INT;
+        SELECT @EmployeeID = employee_id FROM Payroll WHERE payroll_id = @PayrollID;
+        
+        BEGIN TRANSACTION;
+        
+        INSERT INTO AllowanceDeduction (payroll_id, employee_id, type, amount, currency, duration, timezone)
+        VALUES (@PayrollID, @EmployeeID, @Type, @Amount, 'USD', CAST(@Duration AS VARCHAR) + ' mins', @Timezone);
+        
+        INSERT INTO Payroll_Log (payroll_id, actor, modification_type)
+        VALUES (@PayrollID, @EmployeeID, 'Payroll item adjusted: ' + @Type + ' = ' + CAST(@Amount AS VARCHAR));
+        
+        COMMIT TRANSACTION;
+        SELECT 'Payroll item adjusted successfully' AS Message;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
+    END CATCH
 END;
 GO
 
@@ -1067,16 +1412,49 @@ GO
 
 CREATE PROCEDURE ApplyPayrollPolicy
     @PolicyID INT,
-    @PayrollID INT
+    @PayrollID INT,
+    @Type VARCHAR(20),
+    @Description VARCHAR(50)
 AS
 BEGIN
-    IF NOT EXISTS (SELECT 1 FROM PayrollPolicy_ID WHERE payroll_id = @PayrollID AND policy_id = @PolicyID)
-    BEGIN
-        INSERT INTO PayrollPolicy_ID (payroll_id, policy_id)
-        VALUES (@PayrollID, @PolicyID);
-    END
-    
-    SELECT 'Payroll policy applied successfully' AS Message;
+    BEGIN TRY
+        IF NOT EXISTS (SELECT 1 FROM PayrollPolicy WHERE policy_id = @PolicyID)
+        BEGIN
+            SELECT 'Payroll policy not found' AS Message;
+            RETURN;
+        END
+        
+        IF NOT EXISTS (SELECT 1 FROM Payroll WHERE payroll_id = @PayrollID)
+        BEGIN
+            SELECT 'Payroll record not found' AS Message;
+            RETURN;
+        END
+        
+        IF NOT EXISTS (SELECT 1 FROM PayrollPolicy_ID WHERE payroll_id = @PayrollID AND policy_id = @PolicyID)
+        BEGIN
+            BEGIN TRANSACTION;
+            
+            INSERT INTO PayrollPolicy_ID (payroll_id, policy_id)
+            VALUES (@PayrollID, @PolicyID);
+            
+            DECLARE @EmployeeID INT;
+            SELECT @EmployeeID = employee_id FROM Payroll WHERE payroll_id = @PayrollID;
+            
+            INSERT INTO Payroll_Log (payroll_id, actor, modification_type)
+            VALUES (@PayrollID, @EmployeeID, 'Policy Applied: ' + @Type + ' - ' + @Description);
+            
+            COMMIT TRANSACTION;
+            SELECT 'Payroll policy applied successfully' AS Message;
+        END
+        ELSE
+        BEGIN
+            SELECT 'Policy already applied to this payroll' AS Message;
+        END
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
+    END CATCH
 END;
 GO
 
@@ -1119,14 +1497,55 @@ END;
 GO
 
 CREATE PROCEDURE GetBonusEligibleEmployees
-    @Month INT,
-    @Year INT
+    @Eligibility_criteria VARCHAR(200)
 AS
 BEGIN
-    SELECT e.employee_id, e.full_name, e.department_id
-    FROM Employee e
-    WHERE e.is_active = 1
-    AND DATEDIFF(MONTH, e.hire_date, GETDATE()) >= 6;
+    BEGIN TRY
+        IF @Eligibility_criteria LIKE '%6 months%'
+        BEGIN
+            SELECT 
+                e.employee_id, 
+                e.full_name, 
+                e.department_id,
+                d.department_name,
+                DATEDIFF(MONTH, e.hire_date, GETDATE()) AS months_of_service
+            FROM Employee e
+            INNER JOIN Department d ON e.department_id = d.department_id
+            WHERE e.is_active = 1
+            AND DATEDIFF(MONTH, e.hire_date, GETDATE()) >= 6;
+        END
+        ELSE IF @Eligibility_criteria LIKE '%90%' OR @Eligibility_criteria LIKE '%attendance%'
+        BEGIN
+            SELECT 
+                e.employee_id, 
+                e.full_name, 
+                e.department_id,
+                d.department_name,
+                COUNT(a.attendance_id) AS attendance_count
+            FROM Employee e
+            INNER JOIN Department d ON e.department_id = d.department_id
+            LEFT JOIN Attendance a ON e.employee_id = a.employee_id 
+                AND a.entry_time >= DATEADD(MONTH, -3, GETDATE())
+                AND a.exit_time IS NOT NULL
+            WHERE e.is_active = 1
+            GROUP BY e.employee_id, e.full_name, e.department_id, d.department_name
+            HAVING COUNT(a.attendance_id) >= (DATEDIFF(DAY, DATEADD(MONTH, -3, GETDATE()), GETDATE()) * 0.9);
+        END
+        ELSE
+        BEGIN
+            SELECT 
+                e.employee_id, 
+                e.full_name, 
+                e.department_id,
+                d.department_name
+            FROM Employee e
+            INNER JOIN Department d ON e.department_id = d.department_id
+            WHERE e.is_active = 1;
+        END
+    END TRY
+    BEGIN CATCH
+        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
+    END CATCH
 END;
 GO
 
@@ -1447,26 +1866,120 @@ BEGIN
 END;
 GO
 
+CREATE PROCEDURE ViewLeaveRequest
+    @LeaveRequestID INT,
+    @ManagerID INT
+AS
+BEGIN
+    BEGIN TRY
+        IF NOT EXISTS (SELECT 1 FROM LeaveRequest WHERE request_id = @LeaveRequestID)
+        BEGIN
+            SELECT 'Leave request not found' AS Message;
+            RETURN;
+        END
+        
+        IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @ManagerID)
+        BEGIN
+            SELECT 'Manager not found' AS Message;
+            RETURN;
+        END
+        
+        DECLARE @EmployeeID INT;
+        SELECT @EmployeeID = employee_id FROM LeaveRequest WHERE request_id = @LeaveRequestID;
+        
+        IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID AND manager_id = @ManagerID)
+        BEGIN
+            SELECT 'This leave request is not assigned to you' AS Message;
+            RETURN;
+        END
+        
+        SELECT 
+            lr.request_id,
+            lr.employee_id,
+            e.full_name AS employee_name,
+            l.leave_type,
+            l.leave_description,
+            lr.justification,
+            lr.duration,
+            lr.status,
+            lr.approval_timing,
+            d.department_name,
+            p.position_title
+        FROM LeaveRequest lr
+        INNER JOIN Employee e ON lr.employee_id = e.employee_id
+        INNER JOIN Leave l ON lr.leave_id = l.leave_id
+        LEFT JOIN Department d ON e.department_id = d.department_id
+        LEFT JOIN Position p ON e.position_id = p.position_id
+        WHERE lr.request_id = @LeaveRequestID;
+    END TRY
+    BEGIN CATCH
+        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
+    END CATCH
+END;
+GO
+
 CREATE PROCEDURE ReviewLeaveRequest
     @LeaveRequestID INT,
     @ManagerID INT,
     @Decision VARCHAR(20)
 AS
 BEGIN
-    UPDATE LeaveRequest 
-    SET status = @Decision, approval_timing = GETDATE()
-    WHERE request_id = @LeaveRequestID;
-    
-    DECLARE @EmployeeID INT;
-    SELECT @EmployeeID = employee_id FROM LeaveRequest WHERE request_id = @LeaveRequestID;
-    
-    INSERT INTO Notification (message_content, urgency, notification_type)
-    VALUES ('Your leave request has been ' + @Decision, 'Normal', 'Leave');
-    
-    INSERT INTO Employee_Notification (employee_id, notification_id, delivery_status, delivered_at)
-    VALUES (@EmployeeID, SCOPE_IDENTITY(), 'Delivered', GETDATE());
-    
-    SELECT 'Leave request ' + @Decision AS Message;
+    BEGIN TRY
+        IF NOT EXISTS (SELECT 1 FROM LeaveRequest WHERE request_id = @LeaveRequestID)
+        BEGIN
+            SELECT 'Leave request not found' AS Message;
+            RETURN;
+        END
+        
+        IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @ManagerID)
+        BEGIN
+            SELECT 'Manager not found' AS Message;
+            RETURN;
+        END
+        
+        IF @Decision NOT IN ('Approved', 'Rejected', 'Pending')
+        BEGIN
+            SELECT 'Invalid decision. Must be Approved, Rejected, or Pending' AS Message;
+            RETURN;
+        END
+        
+        DECLARE @EmployeeID INT, @LeaveID INT, @Duration INT;
+        SELECT @EmployeeID = employee_id, @LeaveID = leave_id, @Duration = duration
+        FROM LeaveRequest WHERE request_id = @LeaveRequestID;
+        
+        IF @Decision = 'Approved'
+        BEGIN
+            DECLARE @AvailableBalance DECIMAL(5,2);
+            SELECT @AvailableBalance = entitlement 
+            FROM LeaveEntitlement 
+            WHERE employee_id = @EmployeeID AND leave_type_id = @LeaveID;
+            
+            IF @AvailableBalance < @Duration
+            BEGIN
+                SELECT 'Cannot approve - insufficient leave balance' AS Message;
+                RETURN;
+            END
+        END
+        
+        BEGIN TRANSACTION;
+        
+        UPDATE LeaveRequest 
+        SET status = @Decision, approval_timing = GETDATE()
+        WHERE request_id = @LeaveRequestID;
+        
+        INSERT INTO Notification (message_content, urgency, notification_type)
+        VALUES ('Your leave request has been ' + @Decision, 'Normal', 'Leave');
+        
+        INSERT INTO Employee_Notification (employee_id, notification_id, delivery_status, delivered_at)
+        VALUES (@EmployeeID, SCOPE_IDENTITY(), 'Delivered', GETDATE());
+        
+        COMMIT TRANSACTION;
+        SELECT 'Leave request ' + @Decision AS Message;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
+    END CATCH
 END;
 GO
 
@@ -2123,18 +2636,48 @@ GO
 
 CREATE PROCEDURE NotifyProfileUpdate
     @EmployeeID INT,
-    @ChangeType VARCHAR(50)
+    @NotificationType VARCHAR(50)
 AS
 BEGIN
-    INSERT INTO Notification (message_content, urgency, notification_type)
-    VALUES ('Your profile has been updated: ' + @ChangeType, 'Normal', 'Profile');
-    
-    DECLARE @NotificationID INT = SCOPE_IDENTITY();
-    
-    INSERT INTO Employee_Notification (employee_id, notification_id, delivery_status, delivered_at)
-    VALUES (@EmployeeID, @NotificationID, 'Delivered', GETDATE());
-    
-    SELECT 'Profile update notification sent' AS Message;
+    BEGIN TRY
+        IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
+        BEGIN
+            SELECT 'Employee not found' AS Message;
+            RETURN;
+        END
+        
+        DECLARE @MessageContent VARCHAR(255);
+        
+        IF @NotificationType = 'Profile Update'
+            SET @MessageContent = 'Your profile has been updated successfully';
+        ELSE IF @NotificationType = 'Document Upload'
+            SET @MessageContent = 'A new document has been uploaded to your profile';
+        ELSE IF @NotificationType = 'Document Change'
+            SET @MessageContent = 'One of your documents has been modified';
+        ELSE IF @NotificationType = 'Verification Update'
+            SET @MessageContent = 'Your verification/certification has been updated';
+        ELSE IF @NotificationType = 'Contract Update'
+            SET @MessageContent = 'Your employment contract has been updated';
+        ELSE
+            SET @MessageContent = 'Profile update: ' + @NotificationType;
+        
+        BEGIN TRANSACTION;
+        
+        INSERT INTO Notification (message_content, urgency, notification_type)
+        VALUES (@MessageContent, 'Normal', 'Profile');
+        
+        DECLARE @NotificationID INT = SCOPE_IDENTITY();
+        
+        INSERT INTO Employee_Notification (employee_id, notification_id, delivery_status, delivered_at)
+        VALUES (@EmployeeID, @NotificationID, 'Delivered', GETDATE());
+        
+        COMMIT TRANSACTION;
+        SELECT 'Profile update notification sent successfully' AS Message;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
+    END CATCH
 END;
 GO
 

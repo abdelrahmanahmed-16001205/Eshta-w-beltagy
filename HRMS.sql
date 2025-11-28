@@ -1,40 +1,40 @@
 ﻿CREATE DATABASE HRMS;
-GO
 
-USE HRMS;
 GO
+    USE HRMS;
 
-CREATE TABLE Currency (
-    CurrencyCode VARCHAR(10) PRIMARY KEY,
-    CurrencyName VARCHAR(50) NOT NULL,
-    ExchangeRate DECIMAL(10,4) NOT NULL,
-    CreatedDate DATETIME DEFAULT GETDATE(),
-    LastUpdated DATETIME DEFAULT GETDATE()
-);
+GO
+    CREATE TABLE Currency (
+        CurrencyCode VARCHAR(10) PRIMARY KEY,
+        CurrencyName VARCHAR(50) NOT NULL,
+        ExchangeRate DECIMAL(10, 4) NOT NULL,
+        CreatedDate DATETIME DEFAULT GETDATE(),
+        LastUpdated DATETIME DEFAULT GETDATE()
+    );
 
 CREATE TABLE TaxForm (
-    tax_form_id INT PRIMARY KEY IDENTITY(1,1),
+    tax_form_id INT PRIMARY KEY IDENTITY(1, 1),
     jurisdiction VARCHAR(100) NOT NULL,
     validity_period VARCHAR(100) NOT NULL,
     form_content TEXT NOT NULL
 );
 
 CREATE TABLE Position (
-    position_id INT PRIMARY KEY IDENTITY(1,1),
+    position_id INT PRIMARY KEY IDENTITY(1, 1),
     position_title VARCHAR(100) NOT NULL,
     responsibilities TEXT,
-    status VARCHAR(20) DEFAULT 'Active'
+    STATUS VARCHAR(20) DEFAULT 'Active'
 );
 
 CREATE TABLE Department (
-    department_id INT PRIMARY KEY IDENTITY(1,1),
+    department_id INT PRIMARY KEY IDENTITY(1, 1),
     department_name VARCHAR(100) NOT NULL,
     purpose TEXT,
     department_head_id INT NULL
 );
 
 CREATE TABLE Role (
-    role_id INT PRIMARY KEY IDENTITY(1,1),
+    role_id INT PRIMARY KEY IDENTITY(1, 1),
     role_name VARCHAR(100) NOT NULL,
     purpose TEXT
 );
@@ -48,22 +48,22 @@ CREATE TABLE RolePermission (
 );
 
 CREATE TABLE Insurance (
-    insurance_id INT PRIMARY KEY IDENTITY(1,1),
-    type VARCHAR(50) NOT NULL,
-    contribution_rate DECIMAL(5,2) NOT NULL,
+    insurance_id INT PRIMARY KEY IDENTITY(1, 1),
+    TYPE VARCHAR(50) NOT NULL,
+    contribution_rate DECIMAL(5, 2) NOT NULL,
     coverage TEXT NOT NULL
 );
 
 CREATE TABLE PayGrade (
-    pay_grade_id INT PRIMARY KEY IDENTITY(1,1),
+    pay_grade_id INT PRIMARY KEY IDENTITY(1, 1),
     grade_name VARCHAR(50) NOT NULL,
-    min_salary DECIMAL(10,2) NOT NULL,
-    max_salary DECIMAL(10,2) NOT NULL
+    min_salary DECIMAL(10, 2) NOT NULL,
+    max_salary DECIMAL(10, 2) NOT NULL
 );
 
 CREATE TABLE SalaryType (
-    salary_type_id INT PRIMARY KEY IDENTITY(1,1),
-    type VARCHAR(50) NOT NULL,
+    salary_type_id INT PRIMARY KEY IDENTITY(1, 1),
+    TYPE VARCHAR(50) NOT NULL,
     payment_frequency VARCHAR(50) NOT NULL,
     currency VARCHAR(10) NOT NULL,
     FOREIGN KEY (currency) REFERENCES Currency(CurrencyCode)
@@ -71,7 +71,7 @@ CREATE TABLE SalaryType (
 
 CREATE TABLE HourlySalaryType (
     salary_type_id INT PRIMARY KEY,
-    hourly_rate DECIMAL(10,2) NOT NULL,
+    hourly_rate DECIMAL(10, 2) NOT NULL,
     max_monthly_hours INT NOT NULL,
     FOREIGN KEY (salary_type_id) REFERENCES SalaryType(salary_type_id)
 );
@@ -85,14 +85,14 @@ CREATE TABLE MonthlySalaryType (
 
 CREATE TABLE ContractSalaryType (
     salary_type_id INT PRIMARY KEY,
-    contract_value DECIMAL(10,2) NOT NULL,
+    contract_value DECIMAL(10, 2) NOT NULL,
     installment_details TEXT NOT NULL,
     FOREIGN KEY (salary_type_id) REFERENCES SalaryType(salary_type_id)
 );
 
 CREATE TABLE Contract (
-    contract_id INT PRIMARY KEY IDENTITY(1,1),
-    type VARCHAR(50) NOT NULL,
+    contract_id INT PRIMARY KEY IDENTITY(1, 1),
+    TYPE VARCHAR(50) NOT NULL,
     start_date DATE NOT NULL,
     end_date DATE NULL,
     current_state VARCHAR(50) NOT NULL,
@@ -111,14 +111,14 @@ CREATE TABLE FullTimeContract (
 CREATE TABLE PartTimeContract (
     contract_id INT PRIMARY KEY,
     working_hours INT NOT NULL,
-    hourly_rate DECIMAL(10,2) NOT NULL,
+    hourly_rate DECIMAL(10, 2) NOT NULL,
     FOREIGN KEY (contract_id) REFERENCES Contract(contract_id)
 );
 
 CREATE TABLE ConsultantContract (
     contract_id INT PRIMARY KEY,
     project_scope TEXT NOT NULL,
-    fees DECIMAL(10,2) NOT NULL,
+    fees DECIMAL(10, 2) NOT NULL,
     payment_schedule VARCHAR(100),
     FOREIGN KEY (contract_id) REFERENCES Contract(contract_id)
 );
@@ -127,12 +127,12 @@ CREATE TABLE InternshipContract (
     contract_id INT PRIMARY KEY,
     mentoring VARCHAR(100),
     evaluation TEXT,
-    stipend_related DECIMAL(10,2),
+    stipend_related DECIMAL(10, 2),
     FOREIGN KEY (contract_id) REFERENCES Contract(contract_id)
 );
 
 CREATE TABLE Employee (
-    employee_id INT PRIMARY KEY IDENTITY(1,1),
+    employee_id INT PRIMARY KEY IDENTITY(1, 1),
     first_name VARCHAR(50) NOT NULL,
     last_name VARCHAR(50) NOT NULL,
     full_name AS CONCAT(first_name, ' ', last_name) PERSISTED,
@@ -169,7 +169,10 @@ CREATE TABLE Employee (
     FOREIGN KEY (contract_id) REFERENCES Contract(contract_id)
 );
 
-ALTER TABLE Department ADD FOREIGN KEY (department_head_id) REFERENCES Employee(employee_id);
+ALTER TABLE
+    Department
+ADD
+    FOREIGN KEY (department_head_id) REFERENCES Employee(employee_id);
 
 CREATE TABLE HRAdministrator (
     employee_id INT PRIMARY KEY,
@@ -204,7 +207,7 @@ CREATE TABLE LineManager (
 );
 
 CREATE TABLE Skill (
-    skill_id INT PRIMARY KEY IDENTITY(1,1),
+    skill_id INT PRIMARY KEY IDENTITY(1, 1),
     skill_name VARCHAR(100) NOT NULL,
     description TEXT
 );
@@ -219,7 +222,7 @@ CREATE TABLE Employee_Skill (
 );
 
 CREATE TABLE Verification (
-    verification_id INT PRIMARY KEY IDENTITY(1,1),
+    verification_id INT PRIMARY KEY IDENTITY(1, 1),
     verification_type VARCHAR(50) NOT NULL,
     issuer VARCHAR(100) NOT NULL,
     issue_date DATE NOT NULL,
@@ -244,7 +247,7 @@ CREATE TABLE Employee_Role (
 );
 
 CREATE TABLE Leave (
-    leave_id INT PRIMARY KEY IDENTITY(1,1),
+    leave_id INT PRIMARY KEY IDENTITY(1, 1),
     leave_type VARCHAR(50) NOT NULL,
     leave_description TEXT
 );
@@ -279,7 +282,7 @@ CREATE TABLE HolidayLeave (
 );
 
 CREATE TABLE LeavePolicy (
-    policy_id INT PRIMARY KEY IDENTITY(1,1),
+    policy_id INT PRIMARY KEY IDENTITY(1, 1),
     name VARCHAR(100) NOT NULL,
     purpose TEXT,
     eligibility_rules TEXT,
@@ -291,13 +294,13 @@ CREATE TABLE LeavePolicy (
 );
 
 CREATE TABLE LeaveRequest (
-    request_id INT PRIMARY KEY IDENTITY(1,1),
+    request_id INT PRIMARY KEY IDENTITY(1, 1),
     employee_id INT NOT NULL,
     leave_id INT NOT NULL,
     justification TEXT,
     duration INT NOT NULL,
     approval_timing DATETIME,
-    status VARCHAR(50) NOT NULL,
+    STATUS VARCHAR(50) NOT NULL,
     FOREIGN KEY (employee_id) REFERENCES Employee(employee_id),
     FOREIGN KEY (leave_id) REFERENCES Leave(leave_id)
 );
@@ -305,14 +308,14 @@ CREATE TABLE LeaveRequest (
 CREATE TABLE LeaveEntitlement (
     employee_id INT NOT NULL,
     leave_type_id INT NOT NULL,
-    entitlement DECIMAL(5,2) NOT NULL,
+    entitlement DECIMAL(5, 2) NOT NULL,
     PRIMARY KEY (employee_id, leave_type_id),
     FOREIGN KEY (employee_id) REFERENCES Employee(employee_id),
     FOREIGN KEY (leave_type_id) REFERENCES Leave(leave_id)
 );
 
 CREATE TABLE LeaveDocument (
-    document_id INT PRIMARY KEY IDENTITY(1,1),
+    document_id INT PRIMARY KEY IDENTITY(1, 1),
     leave_request_id INT NOT NULL,
     file_path VARCHAR(255) NOT NULL,
     uploaded_at DATETIME DEFAULT GETDATE(),
@@ -320,31 +323,31 @@ CREATE TABLE LeaveDocument (
 );
 
 CREATE TABLE ShiftSchedule (
-    shift_id INT PRIMARY KEY IDENTITY(1,1),
+    shift_id INT PRIMARY KEY IDENTITY(1, 1),
     name VARCHAR(50) NOT NULL,
-    type VARCHAR(50) NOT NULL,
+    TYPE VARCHAR(50) NOT NULL,
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
     break_duration INT,
     shift_date DATE,
-    status VARCHAR(20) DEFAULT 'Active'
+    STATUS VARCHAR(20) DEFAULT 'Active'
 );
 
 CREATE TABLE Exception (
-    exception_id INT PRIMARY KEY IDENTITY(1,1),
+    exception_id INT PRIMARY KEY IDENTITY(1, 1),
     name VARCHAR(100) NOT NULL,
     category VARCHAR(50) NOT NULL,
     date DATE NOT NULL,
-    status VARCHAR(20) DEFAULT 'Active'
+    STATUS VARCHAR(20) DEFAULT 'Active'
 );
 
 CREATE TABLE ShiftAssignment (
-    assignment_id INT PRIMARY KEY IDENTITY(1,1),
+    assignment_id INT PRIMARY KEY IDENTITY(1, 1),
     employee_id INT NOT NULL,
     shift_id INT NOT NULL,
     start_date DATE NOT NULL,
     end_date DATE NULL,
-    status VARCHAR(50) NOT NULL,
+    STATUS VARCHAR(50) NOT NULL,
     exception_id INT NULL,
     FOREIGN KEY (employee_id) REFERENCES Employee(employee_id),
     FOREIGN KEY (shift_id) REFERENCES ShiftSchedule(shift_id),
@@ -352,7 +355,7 @@ CREATE TABLE ShiftAssignment (
 );
 
 CREATE TABLE ShiftCycle (
-    cycle_id INT PRIMARY KEY IDENTITY(1,1),
+    cycle_id INT PRIMARY KEY IDENTITY(1, 1),
     cycle_name VARCHAR(50) NOT NULL,
     description TEXT
 );
@@ -375,7 +378,7 @@ CREATE TABLE Employee_Exception (
 );
 
 CREATE TABLE Attendance (
-    attendance_id INT PRIMARY KEY IDENTITY(1,1),
+    attendance_id INT PRIMARY KEY IDENTITY(1, 1),
     employee_id INT NOT NULL,
     shift_id INT NOT NULL,
     entry_time DATETIME,
@@ -390,7 +393,7 @@ CREATE TABLE Attendance (
 );
 
 CREATE TABLE AttendanceLog (
-    attendance_log_id INT PRIMARY KEY IDENTITY(1,1),
+    attendance_log_id INT PRIMARY KEY IDENTITY(1, 1),
     attendance_id INT NOT NULL,
     actor INT NOT NULL,
     timestamp DATETIME DEFAULT GETDATE(),
@@ -400,12 +403,12 @@ CREATE TABLE AttendanceLog (
 );
 
 CREATE TABLE AttendanceCorrectionRequest (
-    request_id INT PRIMARY KEY IDENTITY(1,1),
+    request_id INT PRIMARY KEY IDENTITY(1, 1),
     employee_id INT NOT NULL,
     date DATE NOT NULL,
     correction_type VARCHAR(50) NOT NULL,
     reason TEXT NOT NULL,
-    status VARCHAR(50) NOT NULL,
+    STATUS VARCHAR(50) NOT NULL,
     recorded_by INT NOT NULL,
     attendance_id INT,
     FOREIGN KEY (employee_id) REFERENCES Employee(employee_id),
@@ -414,11 +417,11 @@ CREATE TABLE AttendanceCorrectionRequest (
 );
 
 CREATE TABLE Device (
-    device_id INT PRIMARY KEY IDENTITY(1,1),
+    device_id INT PRIMARY KEY IDENTITY(1, 1),
     device_type VARCHAR(50) NOT NULL,
     terminal_id VARCHAR(50),
-    latitude DECIMAL(10,7),
-    longitude DECIMAL(10,7),
+    latitude DECIMAL(10, 7),
+    longitude DECIMAL(10, 7),
     employee_id INT,
     FOREIGN KEY (employee_id) REFERENCES Employee(employee_id)
 );
@@ -427,8 +430,8 @@ CREATE TABLE AttendanceSource (
     attendance_id INT NOT NULL,
     device_id INT NOT NULL,
     source_type VARCHAR(50) NOT NULL,
-    latitude DECIMAL(10,7),
-    longitude DECIMAL(10,7),
+    latitude DECIMAL(10, 7),
+    longitude DECIMAL(10, 7),
     recorded_at DATETIME DEFAULT GETDATE(),
     PRIMARY KEY (attendance_id, device_id),
     FOREIGN KEY (attendance_id) REFERENCES Attendance(attendance_id),
@@ -436,26 +439,26 @@ CREATE TABLE AttendanceSource (
 );
 
 CREATE TABLE Payroll (
-    payroll_id INT PRIMARY KEY IDENTITY(1,1),
+    payroll_id INT PRIMARY KEY IDENTITY(1, 1),
     employee_id INT NOT NULL,
-    taxes DECIMAL(10,2),
+    taxes DECIMAL(10, 2),
     period_start DATE NOT NULL,
     period_end DATE NOT NULL,
-    base_amount DECIMAL(10,2) NOT NULL,
-    adjustments DECIMAL(10,2) DEFAULT 0,
-    contributions DECIMAL(10,2) DEFAULT 0,
-    actual_pay DECIMAL(10,2) NOT NULL,
-    net_salary DECIMAL(10,2) NOT NULL,
+    base_amount DECIMAL(10, 2) NOT NULL,
+    adjustments DECIMAL(10, 2) DEFAULT 0,
+    contributions DECIMAL(10, 2) DEFAULT 0,
+    actual_pay DECIMAL(10, 2) NOT NULL,
+    net_salary DECIMAL(10, 2) NOT NULL,
     payment_date DATE,
     FOREIGN KEY (employee_id) REFERENCES Employee(employee_id)
 );
 
 CREATE TABLE AllowanceDeduction (
-    ad_id INT PRIMARY KEY IDENTITY(1,1),
+    ad_id INT PRIMARY KEY IDENTITY(1, 1),
     payroll_id INT NOT NULL,
     employee_id INT NOT NULL,
-    type VARCHAR(50) NOT NULL,
-    amount DECIMAL(10,2) NOT NULL,
+    TYPE VARCHAR(50) NOT NULL,
+    amount DECIMAL(10, 2) NOT NULL,
     currency VARCHAR(10) NOT NULL,
     duration VARCHAR(50),
     timezone VARCHAR(50),
@@ -465,16 +468,16 @@ CREATE TABLE AllowanceDeduction (
 );
 
 CREATE TABLE PayrollPolicy (
-    policy_id INT PRIMARY KEY IDENTITY(1,1),
+    policy_id INT PRIMARY KEY IDENTITY(1, 1),
     effective_date DATE NOT NULL,
-    type VARCHAR(50) NOT NULL,
+    TYPE VARCHAR(50) NOT NULL,
     description TEXT
 );
 
 CREATE TABLE OvertimePolicy (
     policy_id INT PRIMARY KEY,
-    weekday_rate_multiplier DECIMAL(3,2) NOT NULL,
-    weekend_rate_multiplier DECIMAL(3,2) NOT NULL,
+    weekday_rate_multiplier DECIMAL(3, 2) NOT NULL,
+    weekend_rate_multiplier DECIMAL(3, 2) NOT NULL,
     max_hours_per_month INT NOT NULL,
     FOREIGN KEY (policy_id) REFERENCES PayrollPolicy(policy_id)
 );
@@ -482,7 +485,7 @@ CREATE TABLE OvertimePolicy (
 CREATE TABLE LatenessPolicy (
     policy_id INT PRIMARY KEY,
     grace_period_mins INT NOT NULL,
-    deduction_rate DECIMAL(10,2) NOT NULL,
+    deduction_rate DECIMAL(10, 2) NOT NULL,
     FOREIGN KEY (policy_id) REFERENCES PayrollPolicy(policy_id)
 );
 
@@ -509,7 +512,7 @@ CREATE TABLE PayrollPolicy_ID (
 );
 
 CREATE TABLE Payroll_Log (
-    payroll_log_id INT PRIMARY KEY IDENTITY(1,1),
+    payroll_log_id INT PRIMARY KEY IDENTITY(1, 1),
     payroll_id INT NOT NULL,
     actor INT NOT NULL,
     change_date DATETIME DEFAULT GETDATE(),
@@ -519,16 +522,16 @@ CREATE TABLE Payroll_Log (
 );
 
 CREATE TABLE PayrollPeriod (
-    payroll_period_id INT PRIMARY KEY IDENTITY(1,1),
+    payroll_period_id INT PRIMARY KEY IDENTITY(1, 1),
     payroll_id INT NOT NULL,
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
-    status VARCHAR(50) NOT NULL,
+    STATUS VARCHAR(50) NOT NULL,
     FOREIGN KEY (payroll_id) REFERENCES Payroll(payroll_id)
 );
 
 CREATE TABLE Notification (
-    notification_id INT PRIMARY KEY IDENTITY(1,1),
+    notification_id INT PRIMARY KEY IDENTITY(1, 1),
     message_content TEXT NOT NULL,
     timestamp DATETIME DEFAULT GETDATE(),
     urgency VARCHAR(50) NOT NULL,
@@ -547,11 +550,11 @@ CREATE TABLE Employee_Notification (
 );
 
 CREATE TABLE Mission (
-    mission_id INT PRIMARY KEY IDENTITY(1,1),
+    mission_id INT PRIMARY KEY IDENTITY(1, 1),
     destination VARCHAR(50) NOT NULL,
     start_date DATE NOT NULL,
     end_date DATE NOT NULL,
-    status VARCHAR(50) NOT NULL,
+    STATUS VARCHAR(50) NOT NULL,
     employee_id INT NOT NULL,
     manager_id INT NOT NULL,
     FOREIGN KEY (employee_id) REFERENCES Employee(employee_id),
@@ -559,8 +562,8 @@ CREATE TABLE Mission (
 );
 
 CREATE TABLE Reimbursement (
-    reimbursement_id INT PRIMARY KEY IDENTITY(1,1),
-    type VARCHAR(50) NOT NULL,
+    reimbursement_id INT PRIMARY KEY IDENTITY(1, 1),
+    TYPE VARCHAR(50) NOT NULL,
     claim_type VARCHAR(50) NOT NULL,
     approval_date DATE,
     current_status VARCHAR(50) NOT NULL,
@@ -569,7 +572,7 @@ CREATE TABLE Reimbursement (
 );
 
 CREATE TABLE Termination (
-    termination_id INT PRIMARY KEY IDENTITY(1,1),
+    termination_id INT PRIMARY KEY IDENTITY(1, 1),
     date DATE NOT NULL,
     reason TEXT NOT NULL,
     contract_id INT NOT NULL,
@@ -586,12 +589,12 @@ CREATE TABLE EmployeeHierarchy (
 );
 
 CREATE TABLE ApprovalWorkflow (
-    workflow_id INT PRIMARY KEY IDENTITY(1,1),
+    workflow_id INT PRIMARY KEY IDENTITY(1, 1),
     workflow_type VARCHAR(50) NOT NULL,
-    threshold_amount DECIMAL(10,2),
+    threshold_amount DECIMAL(10, 2),
     approver_role VARCHAR(50),
     created_by INT NOT NULL,
-    status VARCHAR(50) NOT NULL,
+    STATUS VARCHAR(50) NOT NULL,
     FOREIGN KEY (created_by) REFERENCES Employee(employee_id)
 );
 
@@ -606,7 +609,7 @@ CREATE TABLE ApprovalWorkflowStep (
 );
 
 CREATE TABLE ManagerNotes (
-    note_id INT PRIMARY KEY IDENTITY(1,1),
+    note_id INT PRIMARY KEY IDENTITY(1, 1),
     employee_id INT NOT NULL,
     manager_id INT NOT NULL,
     note_content TEXT NOT NULL,
