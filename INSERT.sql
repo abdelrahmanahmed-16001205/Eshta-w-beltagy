@@ -730,15 +730,9 @@ VALUES (3,
         NULL,
         NULL);
 
-INSERT INTO AttendanceLog (attendance_id, actor, timestamp, reason)
-VALUES (7,
-        5,
-        GETDATE(),
-        'Late arrival - traffic jam approved by manager'),
-       (8,
-        5,
-        GETDATE(),
-        'Missed clock out - system corrected by manager');
+INSERT INTO AttendanceLog (attendance_log_id, attendance_id, actor, timestamp, reason)
+VALUES (1, 7, 5, GETDATE(), 'Late arrival - traffic jam approved by manager'),
+       (2, 8, 5, GETDATE(), 'Missed clock out - system corrected by manager');
 
 INSERT INTO AttendanceCorrectionRequest (employee_id,
                                          date,
@@ -1062,31 +1056,16 @@ VALUES (2, 1, 2),
        (9, 6, 4),
        (10, 2, 3);
 
-INSERT INTO ApprovalWorkflow (workflow_type,
+INSERT INTO ApprovalWorkflow (workflow_id,
+                              workflow_type,
                               threshold_amount,
                               approver_role,
                               created_by,
                               STATUS)
-VALUES ('Leave Request',
-        NULL,
-        'Line Manager',
-        2,
-        'Active'),
-       ('Reimbursement',
-        1000.00,
-        'HR Administrator',
-        2,
-        'Active'),
-       ('Payroll Adjustment',
-        5000.00,
-        'Payroll Officer',
-        4,
-        'Active'),
-       ('Contract Approval',
-        NULL,
-        'HR Administrator',
-        2,
-        'Active');
+VALUES (1, 'Leave Request', NULL, 'Line Manager', 2, 'Active'),
+       (2, 'Reimbursement', 1000.00, 'HR Administrator', 2, 'Active'),
+       (3, 'Payroll Adjustment', 5000.00, 'Payroll Officer', 4, 'Active'),
+       (4, 'Contract Approval', NULL, 'HR Administrator', 2, 'Active');
 
 INSERT INTO ApprovalWorkflowStep (workflow_id,
                                   step_number,
@@ -1121,3 +1100,4 @@ VALUES (6,
         'Ready for more responsibility in contract management.',
 
         '2025-11-12 11:00:00');
+
