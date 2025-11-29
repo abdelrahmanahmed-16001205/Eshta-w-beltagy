@@ -1762,20 +1762,53 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE UpdateInsuranceBrackets @BracketID INT,
-                                         @NewMinSalary DECIMAL(10, 2),
-                                         @NewMaxSalary DECIMAL(10, 2),
-                                         @NewEmployeeContribution DECIMAL(5, 2),
-                                         @NewEmployerContribution DECIMAL(5, 2),
-                                         @UpdatedBy INT AS
+CREATE PROCEDURE UpdateInsuranceBrackets
+    @BracketID INT,
+    @MinSalary DECIMAL(10, 2),
+    @MaxSalary DECIMAL(10, 2),
+    @EmployeeContribution DECIMAL(5, 2),
+    @EmployerContribution DECIMAL(5, 2)
+AS
 BEGIN
-    UPDATE
-        Insurance
-    SET contribution_rate = @NewEmployeeContribution
+    IF @BracketID IS NULL OR @MinSalary IS NULL OR @MaxSalary IS NULL OR 
+       @EmployeeContribution IS NULL OR @EmployerContribution IS NULL
+    BEGIN
+        SELECT 'One of the inputs is null' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Insurance WHERE insurance_id = @BracketID)
+    BEGIN
+        SELECT 'Insurance bracket not found' AS Message;
+        RETURN;
+    END
+
+    IF @MinSalary < 0 OR @MaxSalary < 0 OR @MinSalary > @MaxSalary
+    BEGIN
+        SELECT 'Invalid salary range' AS Message;
+        RETURN;
+    END
+
+    IF @EmployeeContribution < 0 OR @EmployeeContribution > 100
+    BEGIN
+        SELECT 'Employee contribution must be between 0 and 100' AS Message;
+        RETURN;
+    END
+
+    IF @EmployerContribution < 0 OR @EmployerContribution > 100
+    BEGIN
+        SELECT 'Employer contribution must be between 0 and 100' AS Message;
+        RETURN;
+    END
+
+    UPDATE Insurance
+    SET 
+        contribution_rate = @EmployeeContribution,
+        coverage = 'Min: ' + CAST(@MinSalary AS VARCHAR) + ', Max: ' + CAST(@MaxSalary AS VARCHAR) +
+                   ', Employer: ' + CAST(@EmployerContribution AS VARCHAR) + '%'
     WHERE insurance_id = @BracketID;
 
-    SELECT 'Insurance brackets updated successfully' AS Message;
-
+    SELECT 'Insurance bracket updated successfully' AS Message;
 END;
 
 GO
@@ -2068,255 +2101,656 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE GetPayrollByDepartment @DepartmentID INT,
-                                        @Month INT,
-                                        @Year INT AS
-BEGIN
-    DECLARE @StartDate DATE = DATEFROMPARTS(@Year, @Month, 1);
-
-    DECLARE @EndDate DATE = EOMONTH(@StartDate);
-
-    SELECT e.department_id,
-           d.department_name,
-           SUM(p.net_salary)   AS total_payroll,
-           COUNT(p.payroll_id) AS employee_count
-    FROM Payroll p
-             INNER JOIN Employee e ON p.employee_id = e.employee_id
-             INNER JOIN Department d ON e.department_id = d.department_id
-    WHERE e.department_id = @DepartmentID
-      AND p.period_start >= @StartDate
-      AND p.period_end <= @EndDate
-    GROUP BY e.department_id,
-             d.department_name;
-
-END;
-
-GO
-CREATE PROCEDURE ValidateAttendanceBeforePayroll @PayrollPeriodID INT AS
-BEGIN
-    SELECT e.employee_id,
-           e.full_name,
-           COUNT(a.attendance_id) AS missed_punches
-    FROM Employee e
-             LEFT JOIN Attendance a ON e.employee_id = a.employee_id
-    WHERE (
-              a.entry_time IS NULL
-                  OR a.exit_time IS NULL
-              )
-    GROUP BY e.employee_id,
-             e.full_name
-    HAVING COUNT(a.attendance_id) > 0;
-
-END;
-
-GO
-CREATE PROCEDURE SyncAttendanceToPayroll @SyncDate DATE AS
-BEGIN
-    SELECT 'Attendance records synced to payroll for ' + CAST(@SyncDate AS VARCHAR) AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE SyncApprovedPermissionsToPayroll @PayrollPeriodID INT AS
-BEGIN
-    SELECT 'Approved permissions synced to payroll' AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE ConfigurePayGrades @GradeName VARCHAR(50),
-                                    @MinSalary DECIMAL(10, 2),
-                                    @MaxSalary DECIMAL(10, 2) AS
-BEGIN
-    IF NOT EXISTS (SELECT 1
-                   FROM PayGrade
-                   WHERE grade_name = @GradeName)
-        BEGIN
-            INSERT INTO PayGrade (grade_name, min_salary, max_salary)
-            VALUES (@GradeName, @MinSalary, @MaxSalary);
-
-            SELECT 'Pay grade configured successfully' AS Message;
-
-        END
-    ELSE
-        SELECT 'Pay grade already exists' AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE ConfigureShiftAllowances @ShiftType VARCHAR(50),
-                                          @AllowanceName VARCHAR(50),
-                                          @Amount DECIMAL(10, 2) AS
-BEGIN
-    SELECT 'Shift allowance configured: ' + @AllowanceName + ' = ' + CAST(@Amount AS VARCHAR) AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE EnableMultiCurrencyPayroll @CurrencyCode VARCHAR(10),
-                                            @ExchangeRate DECIMAL(10, 4) AS
-    IF NOT EXISTS (SELECT 1
-                   FROM Currency
-                   WHERE CurrencyCode = @CurrencyCode)
-        BEGIN
-            SELECT 'Currency not supported. Only predefined currencies can be enabled.' AS Message;
-            RETURN;
-        END
-
-UPDATE Currency
-SET ExchangeRate = @ExchangeRate,
-    LastUpdated  = GETDATE()
-WHERE CurrencyCode = @CurrencyCode;
-
-SELECT 'Multi-currency payroll enabled for ' + @CurrencyCode AS Message;
-
-GO
-CREATE PROCEDURE ManageTaxRules @TaxRuleName VARCHAR(50),
-                                @CountryCode VARCHAR(10),
-                                @Rate DECIMAL(5, 2),
-                                @Exemption DECIMAL(10, 2) AS
-BEGIN
-    SELECT 'Tax rule configured: ' + @TaxRuleName + ' at ' + CAST(@Rate AS VARCHAR) + '%' AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE ApprovePayrollConfigChanges @ConfigID INT,
-                                             @ApproverID INT,
-                                             @Status VARCHAR(20) AS
-BEGIN
-    SELECT 'Payroll configuration change ' + @Status AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE ConfigureSigningBonus @EmployeeID INT,
-                                       @BonusAmount DECIMAL(10, 2),
-                                       @EffectiveDate DATE AS
-BEGIN
-    SELECT 'Signing bonus configured: ' + CAST(@BonusAmount AS VARCHAR) + ' for employee ' +
-           CAST(@EmployeeID AS VARCHAR) AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE ConfigureTerminationBenefits @EmployeeID INT,
-                                              @CompensationAmount DECIMAL(10, 2),
-                                              @EffectiveDate DATE,
-                                              @Reason VARCHAR(50) AS
-BEGIN
-    SELECT 'Termination benefits configured for employee ' + CAST(@EmployeeID AS VARCHAR) AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE ConfigureInsuranceBrackets @InsuranceType VARCHAR(50),
-                                            @MinSalary DECIMAL(10, 2),
-                                            @MaxSalary DECIMAL(10, 2),
-                                            @EmployeeContribution DECIMAL(5, 2),
-                                            @EmployerContribution DECIMAL(5, 2) AS
-BEGIN
-    INSERT INTO Insurance (TYPE, contribution_rate, coverage)
-    VALUES (@InsuranceType,
-            @EmployeeContribution,
-            'Salary Range: ' + CAST(@MinSalary AS VARCHAR) + ' - ' + CAST(@MaxSalary AS VARCHAR));
-
-    SELECT 'Insurance bracket configured successfully' AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE ConfigurePayrollPolicies @PolicyType VARCHAR(50),
-                                          @PolicyDetails NVARCHAR(MAX),
-                                          @EffectiveDate DATE
+CREATE PROCEDURE GetPayrollByDepartment
+    @DepartmentID INT,
+    @Month INT,
+    @Year INT
 AS
 BEGIN
-    INSERT INTO PayrollPolicy (TYPE, description, effective_date)
-    VALUES (@PolicyType, @PolicyDetails, @EffectiveDate); -- Use @EffectiveDate
+    IF @DepartmentID IS NULL OR @Month IS NULL OR @Year IS NULL
+    BEGIN
+        SELECT 'One of the inputs is null' AS Message;
+        RETURN;
+    END
+
+    IF @Month < 1 OR @Month > 12
+    BEGIN
+        SELECT 'Month must be between 1 and 12' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Department WHERE department_id = @DepartmentID)
+    BEGIN
+        SELECT 'Department ID does not exist' AS Message;
+        RETURN;
+    END
+
+    SELECT 
+        d.department_id,
+        d.department_name,
+        SUM(p.net_salary) AS total_payroll,
+        COUNT(p.payroll_id) AS employee_count,
+        AVG(p.net_salary) AS average_salary
+    FROM Payroll p
+    INNER JOIN Employee e ON p.employee_id = e.employee_id
+    INNER JOIN Department d ON e.department_id = d.department_id
+    WHERE e.department_id = @DepartmentID
+      AND MONTH(p.period_start) = @Month
+      AND YEAR(p.period_start) = @Year
+    GROUP BY d.department_id, d.department_name;
+END;
+
+GO
+CREATE PROCEDURE ValidateAttendanceBeforePayroll
+    @PayrollPeriodID INT
+AS
+BEGIN
+    IF @PayrollPeriodID IS NULL
+    BEGIN
+        SELECT 'Payroll Period ID is required' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM PayrollPeriod WHERE payroll_period_id = @PayrollPeriodID)
+    BEGIN
+        SELECT 'Payroll Period ID does not exist' AS Message;
+        RETURN;
+    END
+
+    DECLARE @StartDate DATE;
+    DECLARE @EndDate DATE;
+    SELECT @StartDate = start_date, @EndDate = end_date
+    FROM PayrollPeriod
+    WHERE payroll_period_id = @PayrollPeriodID;
+
+    SELECT 
+        e.employee_id,
+        e.full_name,
+        d.department_name
+    FROM Employee e
+    INNER JOIN Department d ON e.department_id = d.department_id
+    INNER JOIN Attendance a ON e.employee_id = a.employee_id
+    WHERE a.entry_time IS NULL 
+       OR a.exit_time IS NULL
+       OR (CAST(a.entry_time AS DATE) BETWEEN @StartDate AND @EndDate)
+    ORDER BY e.employee_id;
+END;
+
+GO
+CREATE PROCEDURE SyncAttendanceToPayroll
+    @SyncDate DATE
+AS
+BEGIN
+    IF @SyncDate IS NULL
+    BEGIN
+        SELECT 'Sync date is required' AS Message;
+        RETURN;
+    END
+
+    DECLARE @RecordCount INT;
+    SELECT @RecordCount = COUNT(*)
+    FROM Attendance
+    WHERE CAST(entry_time AS DATE) = @SyncDate
+      AND entry_time IS NOT NULL
+      AND exit_time IS NOT NULL;
+
+    IF @RecordCount = 0
+    BEGIN
+        SELECT 'No attendance records found for sync date' AS Message;
+        RETURN;
+    END
+
+    SELECT 'Attendance records synced to payroll for ' + CAST(@SyncDate AS VARCHAR) + 
+           ' (Total: ' + CAST(@RecordCount AS VARCHAR) + ')' AS Message;
+END;
+
+GO
+CREATE PROCEDURE SyncApprovedPermissionsToPayroll
+    @PayrollPeriodID INT
+AS
+BEGIN
+    IF @PayrollPeriodID IS NULL
+    BEGIN
+        SELECT 'Payroll Period ID is required' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM PayrollPeriod WHERE payroll_period_id = @PayrollPeriodID)
+    BEGIN
+        SELECT 'Payroll Period ID does not exist' AS Message;
+        RETURN;
+    END
+
+    DECLARE @PermissionCount INT;
+    SELECT @PermissionCount = COUNT(*)
+    FROM LeaveRequest
+    WHERE status = 'Approved';
+
+    SELECT 'Approved permissions synced to payroll (Total: ' + 
+           CAST(@PermissionCount AS VARCHAR) + ')' AS Message;
+END;
+
+GO
+CREATE PROCEDURE ConfigurePayGrades
+    @GradeName VARCHAR(50),
+    @MinSalary DECIMAL(10, 2),
+    @MaxSalary DECIMAL(10, 2)
+AS
+BEGIN
+    IF @GradeName IS NULL OR @MinSalary IS NULL OR @MaxSalary IS NULL
+    BEGIN
+        SELECT 'One of the inputs is null' AS Message;
+        RETURN;
+    END
+
+    IF @MinSalary < 0 OR @MaxSalary < 0
+    BEGIN
+        SELECT 'Salaries cannot be negative' AS Message;
+        RETURN;
+    END
+
+    IF @MinSalary > @MaxSalary
+    BEGIN
+        SELECT 'Minimum salary cannot exceed maximum salary' AS Message;
+        RETURN;
+    END
+
+    IF EXISTS (SELECT 1 FROM PayGrade WHERE grade_name = @GradeName)
+    BEGIN
+        SELECT 'Pay grade already exists' AS Message;
+        RETURN;
+    END
+
+    INSERT INTO PayGrade (grade_name, min_salary, max_salary)
+    VALUES (@GradeName, @MinSalary, @MaxSalary);
+
+    SELECT 'Pay grade configured successfully' AS Message;
+END;
+
+GO
+CREATE PROCEDURE ConfigureShiftAllowances
+    @ShiftType VARCHAR(50),
+    @AllowanceName VARCHAR(50),
+    @Amount DECIMAL(10, 2)
+AS
+BEGIN
+    IF @ShiftType IS NULL OR @AllowanceName IS NULL OR @Amount IS NULL
+    BEGIN
+        SELECT 'One of the inputs is null' AS Message;
+        RETURN;
+    END
+
+    IF @Amount < 0
+    BEGIN
+        SELECT 'Allowance amount cannot be negative' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM ShiftSchedule WHERE type = @ShiftType)
+    BEGIN
+        SELECT 'Shift type does not exist' AS Message;
+        RETURN;
+    END
+
+    INSERT INTO AllowanceDeduction (allowance_name, amount, shift_type)
+    VALUES (@AllowanceName, @Amount, @ShiftType);
+
+    SELECT 'Shift allowance configured: ' + @AllowanceName + ' = ' + CAST(@Amount AS VARCHAR) AS Message;
+END;
+
+GO
+CREATE PROCEDURE EnableMultiCurrencyPayroll
+    @CurrencyCode VARCHAR(10),
+    @ExchangeRate DECIMAL(10, 4)
+AS
+BEGIN
+    IF @CurrencyCode IS NULL OR @ExchangeRate IS NULL
+    BEGIN
+        SELECT 'One of the inputs is null' AS Message;
+        RETURN;
+    END
+
+    IF @ExchangeRate <= 0
+    BEGIN
+        SELECT 'Exchange rate must be greater than 0' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Currency WHERE CurrencyCode = @CurrencyCode)
+    BEGIN
+        SELECT 'Currency not supported. Only predefined currencies can be enabled.' AS Message;
+        RETURN;
+    END
+
+    UPDATE Currency
+    SET ExchangeRate = @ExchangeRate,
+        LastUpdated = GETDATE()
+    WHERE CurrencyCode = @CurrencyCode;
+
+    SELECT 'Multi-currency payroll enabled for ' + @CurrencyCode AS Message;
+END;
+
+GO
+CREATE PROCEDURE ManageTaxRules
+    @TaxRuleName VARCHAR(50),
+    @CountryCode VARCHAR(10),
+    @Rate DECIMAL(5, 2),
+    @Exemption DECIMAL(10, 2)
+AS
+BEGIN
+    IF @TaxRuleName IS NULL OR @CountryCode IS NULL OR @Rate IS NULL OR @Exemption IS NULL
+    BEGIN
+        SELECT 'One of the inputs is null' AS Message;
+        RETURN;
+    END
+
+    IF @Rate < 0 OR @Rate > 100
+    BEGIN
+        SELECT 'Tax rate must be between 0 and 100' AS Message;
+        RETURN;
+    END
+
+    IF @Exemption < 0
+    BEGIN
+        SELECT 'Exemption cannot be negative' AS Message;
+        RETURN;
+    END
+
+    INSERT INTO TaxForm (jurisdiction, validity_period, form_content)
+    VALUES (
+        @CountryCode,
+        'Annual',
+        @TaxRuleName + ': Rate=' + CAST(@Rate AS VARCHAR) + '%, Exemption=' + CAST(@Exemption AS VARCHAR)
+    );
+
+    SELECT 'Tax rule configured: ' + @TaxRuleName + ' at ' + CAST(@Rate AS VARCHAR) + '%' AS Message;
+END;
+
+GO
+CREATE PROCEDURE ApprovePayrollConfigChanges
+    @ConfigID INT,
+    @ApproverID INT,
+    @Status VARCHAR(20)
+AS
+BEGIN
+    IF @ConfigID IS NULL OR @ApproverID IS NULL OR @Status IS NULL
+    BEGIN
+        SELECT 'One of the inputs is null' AS Message;
+        RETURN;
+    END
+
+    IF @Status NOT IN ('Approved', 'Rejected', 'Pending')
+    BEGIN
+        SELECT 'Invalid status. Allowed: Approved, Rejected, Pending' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM PayrollPolicy WHERE policy_id = @ConfigID)
+    BEGIN
+        SELECT 'Configuration ID does not exist' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM HRAdministrator WHERE employee_id = @ApproverID)
+    BEGIN
+        SELECT 'Approver is not an HR Administrator' AS Message;
+        RETURN;
+    END
+
+    SELECT 'Payroll configuration change ' + @Status AS Message;
+END;
+
+GO
+CREATE PROCEDURE ConfigureSigningBonus
+    @EmployeeID INT,
+    @BonusAmount DECIMAL(10, 2),
+    @EffectiveDate DATE
+AS
+BEGIN
+    IF @EmployeeID IS NULL OR @BonusAmount IS NULL OR @EffectiveDate IS NULL
+    BEGIN
+        SELECT 'One of the inputs is null' AS Message;
+        RETURN;
+    END
+
+    IF @BonusAmount <= 0
+    BEGIN
+        SELECT 'Bonus amount must be greater than 0' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
+    BEGIN
+        SELECT 'Employee ID does not exist' AS Message;
+        RETURN;
+    END
+
+    INSERT INTO PayrollPolicy (type, description, effective_date)
+    VALUES (
+        'Bonus',
+        'Signing bonus for employee ' + CAST(@EmployeeID AS VARCHAR),
+        @EffectiveDate
+    );
+
+    SELECT 'Signing bonus configured: ' + CAST(@BonusAmount AS VARCHAR) + 
+           ' for employee ' + CAST(@EmployeeID AS VARCHAR) AS Message;
+END;
+
+GO
+CREATE PROCEDURE ConfigureTerminationBenefits
+    @EmployeeID INT,
+    @CompensationAmount DECIMAL(10, 2),
+    @EffectiveDate DATE,
+    @Reason VARCHAR(50)
+AS
+BEGIN
+    IF @EmployeeID IS NULL OR @CompensationAmount IS NULL OR @EffectiveDate IS NULL OR @Reason IS NULL
+    BEGIN
+        SELECT 'One of the inputs is null' AS Message;
+        RETURN;
+    END
+
+    IF @CompensationAmount < 0
+    BEGIN
+        SELECT 'Compensation amount cannot be negative' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
+    BEGIN
+        SELECT 'Employee ID does not exist' AS Message;
+        RETURN;
+    END
+
+    DECLARE @ContractID INT;
+    SELECT @ContractID = contract_id
+    FROM Employee
+    WHERE employee_id = @EmployeeID;
+
+    IF @ContractID IS NULL
+    BEGIN
+        SELECT 'Employee has no contract' AS Message;
+        RETURN;
+    END
+
+    INSERT INTO Termination (date, reason, contract_id)
+    VALUES (@EffectiveDate, @Reason, @ContractID);
+
+    SELECT 'Termination benefits configured for employee ' + CAST(@EmployeeID AS VARCHAR) AS Message;
+END;
+
+GO
+CREATE PROCEDURE ConfigureInsuranceBrackets
+    @InsuranceType VARCHAR(50),
+    @MinSalary DECIMAL(10, 2),
+    @MaxSalary DECIMAL(10, 2),
+    @EmployeeContribution DECIMAL(5, 2),
+    @EmployerContribution DECIMAL(5, 2)
+AS
+BEGIN
+    IF @InsuranceType IS NULL OR @MinSalary IS NULL OR @MaxSalary IS NULL OR 
+       @EmployeeContribution IS NULL OR @EmployerContribution IS NULL
+    BEGIN
+        SELECT 'One of the inputs is null' AS Message;
+        RETURN;
+    END
+
+    IF @MinSalary < 0 OR @MaxSalary < 0
+    BEGIN
+        SELECT 'Salaries cannot be negative' AS Message;
+        RETURN;
+    END
+
+    IF @MinSalary > @MaxSalary
+    BEGIN
+        SELECT 'Minimum salary cannot exceed maximum salary' AS Message;
+        RETURN;
+    END
+
+    IF @EmployeeContribution < 0 OR @EmployeeContribution > 100
+    BEGIN
+        SELECT 'Employee contribution must be between 0 and 100' AS Message;
+        RETURN;
+    END
+
+    IF @EmployerContribution < 0 OR @EmployerContribution > 100
+    BEGIN
+        SELECT 'Employer contribution must be between 0 and 100' AS Message;
+        RETURN;
+    END
+
+    INSERT INTO Insurance (type, contribution_rate, coverage)
+    VALUES (
+        @InsuranceType,
+        @EmployeeContribution,
+        'Min: ' + CAST(@MinSalary AS VARCHAR) + ', Max: ' + CAST(@MaxSalary AS VARCHAR) +
+        ', Employer: ' + CAST(@EmployerContribution AS VARCHAR) + '%'
+    );
+
+    SELECT 'Insurance bracket configured successfully' AS Message;
+END;
+
+GO
+CREATE PROCEDURE ConfigurePayrollPolicies
+    @PolicyType VARCHAR(50),
+    @PolicyDetails NVARCHAR(MAX),
+    @EffectiveDate DATE
+AS
+BEGIN
+    IF @PolicyType IS NULL OR @PolicyDetails IS NULL OR @EffectiveDate IS NULL
+    BEGIN
+        SELECT 'One of the inputs is null' AS Message;
+        RETURN;
+    END
+
+    IF @PolicyType NOT IN ('Overtime', 'Bonus', 'Deduction', 'Lateness')
+    BEGIN
+        SELECT 'Invalid policy type. Allowed: Overtime, Bonus, Deduction, Lateness' AS Message;
+        RETURN;
+    END
+
+    INSERT INTO PayrollPolicy (type, description, effective_date)
+    VALUES (@PolicyType, @PolicyDetails, @EffectiveDate);
 
     SELECT 'Payroll policy configured successfully' AS Message;
 END;
 
 
 GO
-CREATE PROCEDURE DefinePayGrades @GradeName VARCHAR(50),
-                                 @MinSalary DECIMAL(10, 2),
-                                 @MaxSalary DECIMAL(10, 2),
-                                 @CreatedBy INT AS
-BEGIN
-    IF NOT EXISTS (SELECT 1
-                   FROM PayGrade
-                   WHERE grade_name = @GradeName)
-        BEGIN
-            INSERT INTO PayGrade (grade_name, min_salary, max_salary)
-            VALUES (@GradeName, @MinSalary, @MaxSalary);
-
-            SELECT 'Pay grade defined successfully' AS Message;
-
-        END
-    ELSE
-        SELECT 'Pay grade already exists' AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE ConfigureEscalationWorkflow @ThresholdAmount DECIMAL(10, 2),
-                                             @ApproverRole VARCHAR(50),
-                                             @CreatedBy INT AS
-BEGIN
-    INSERT INTO ApprovalWorkflow (workflow_type,
-                                  threshold_amount,
-                                  approver_role,
-                                  created_by,
-                                  STATUS)
-    VALUES ('Payroll Escalation',
-            @ThresholdAmount,
-            @ApproverRole,
-            @CreatedBy,
-            'Active');
-
-    SELECT 'Escalation workflow configured successfully' AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE DefinePayType @EmployeeID INT,
-                               @PayType VARCHAR(50),
-                               @EffectiveDate DATE AS
-BEGIN
-    SELECT 'Pay type defined for employee: ' + @PayType AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE ConfigureOvertimeRules @DayType VARCHAR(20),
-                                        @Multiplier DECIMAL(3, 2),
-                                        @HoursPerMonth INT
+CREATE PROCEDURE DefinePayGrades
+    @GradeName VARCHAR(50),
+    @MinSalary DECIMAL(10, 2),
+    @MaxSalary DECIMAL(10, 2),
+    @CreatedBy INT
 AS
 BEGIN
-    INSERT INTO PayrollPolicy (TYPE, description, effective_date)
-    VALUES ('Overtime',
-            @DayType + ' overtime at ' + CAST(@Multiplier AS VARCHAR) + 'x rate',
-            GETDATE());
+    IF @GradeName IS NULL OR @MinSalary IS NULL OR @MaxSalary IS NULL OR @CreatedBy IS NULL
+    BEGIN
+        SELECT 'One of the inputs is null' AS Message;
+        RETURN;
+    END
 
-    DECLARE @PolicyID INT = SCOPE_IDENTITY();
+    IF NOT EXISTS (SELECT 1 FROM HRAdministrator WHERE employee_id = @CreatedBy)
+    BEGIN
+        SELECT 'Creator is not an HR Administrator' AS Message;
+        RETURN;
+    END
 
-    INSERT INTO OvertimePolicy (policy_id,
-                                weekday_rate_multiplier,
-                                weekend_rate_multiplier,
-                                max_hours_per_month)
-    VALUES (@PolicyID, @Multiplier, @Multiplier * 1.5, @HoursPerMonth);
+    IF @MinSalary < 0 OR @MaxSalary < 0
+    BEGIN
+        SELECT 'Salaries cannot be negative' AS Message;
+        RETURN;
+    END
+
+    IF @MinSalary > @MaxSalary
+    BEGIN
+        SELECT 'Minimum salary cannot exceed maximum salary' AS Message;
+        RETURN;
+    END
+
+    IF EXISTS (SELECT 1 FROM PayGrade WHERE grade_name = @GradeName)
+    BEGIN
+        SELECT 'Pay grade already exists' AS Message;
+        RETURN;
+    END
+
+    INSERT INTO PayGrade (grade_name, min_salary, max_salary)
+    VALUES (@GradeName, @MinSalary, @MaxSalary);
+
+    SELECT 'Pay grade defined successfully' AS Message;
+END;
+
+GO
+CREATE PROCEDURE ConfigureEscalationWorkflow
+    @ThresholdAmount DECIMAL(10, 2),
+    @ApproverRole VARCHAR(50),
+    @CreatedBy INT
+AS
+BEGIN
+    IF @ThresholdAmount IS NULL OR @ApproverRole IS NULL OR @CreatedBy IS NULL
+    BEGIN
+        SELECT 'One of the inputs is null' AS Message;
+        RETURN;
+    END
+
+    IF @ThresholdAmount < 0
+    BEGIN
+        SELECT 'Threshold amount cannot be negative' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @CreatedBy)
+    BEGIN
+        SELECT 'Creator employee ID does not exist' AS Message;
+        RETURN;
+    END
+
+    INSERT INTO ApprovalWorkflow (
+        workflow_type,
+        threshold_amount,
+        approver_role,
+        created_by,
+        status
+    )
+    VALUES (
+        'Payroll Escalation',
+        @ThresholdAmount,
+        @ApproverRole,
+        @CreatedBy,
+        'Active'
+    );
+
+    SELECT 'Escalation workflow configured successfully' AS Message;
+END;
+
+GO
+CCREATE PROCEDURE DefinePayType
+    @EmployeeID INT,
+    @PayType VARCHAR(50),
+    @EffectiveDate DATE
+AS
+BEGIN
+    IF @EmployeeID IS NULL OR @PayType IS NULL OR @EffectiveDate IS NULL
+    BEGIN
+        SELECT 'One of the inputs is null' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
+    BEGIN
+        SELECT 'Employee ID does not exist' AS Message;
+        RETURN;
+    END
+
+    IF @PayType NOT IN ('Hourly', 'Daily', 'Monthly', 'Contract')
+    BEGIN
+        SELECT 'Invalid pay type. Allowed: Hourly, Daily, Monthly, Contract' AS Message;
+        RETURN;
+    END
+
+    UPDATE Employee
+    SET salary_type = @PayType
+    WHERE employee_id = @EmployeeID;
+
+    SELECT 'Pay type defined for employee: ' + @PayType AS Message;
+END;
+
+GO
+CREATE PROCEDURE ConfigureOvertimeRules
+    @DayType VARCHAR(20),
+    @Multiplier DECIMAL(3, 2),
+    @HoursPerMonth INT
+AS
+BEGIN
+    IF @DayType IS NULL OR @Multiplier IS NULL OR @HoursPerMonth IS NULL
+    BEGIN
+        SELECT 'One of the inputs is null' AS Message;
+        RETURN;
+    END
+
+    IF @Multiplier <= 0 OR @Multiplier > 5
+    BEGIN
+        SELECT 'Multiplier must be between 0 and 5' AS Message;
+        RETURN;
+    END
+
+    IF @HoursPerMonth <= 0
+    BEGIN
+        SELECT 'Hours per month must be greater than 0' AS Message;
+        RETURN;
+    END
+
+    IF @DayType NOT IN ('Weekday', 'Weekend', 'Holiday')
+    BEGIN
+        SELECT 'Invalid day type. Allowed: Weekday, Weekend, Holiday' AS Message;
+        RETURN;
+    END
+
+    INSERT INTO PayrollPolicy (type, description, effective_date)
+    VALUES (
+        'Overtime',
+        @DayType + ' overtime at ' + CAST(@Multiplier AS VARCHAR) + 'x rate',
+        GETDATE()
+    );
 
     SELECT 'Overtime rules configured successfully' AS Message;
 END;
 
 GO
-CREATE PROCEDURE ConfigureShiftAllowance @ShiftType VARCHAR(20),
-                                         @AllowanceAmount DECIMAL(10, 2),
-                                         @CreatedBy INT AS
+CREATE PROCEDURE ConfigureShiftAllowance
+    @ShiftType VARCHAR(20),
+    @AllowanceAmount DECIMAL(10, 2),
+    @CreatedBy INT
+AS
 BEGIN
-    SELECT 'Shift allowance configured: ' + @ShiftType + ' = ' + CAST(@AllowanceAmount AS VARCHAR) AS Message;
+    IF @ShiftType IS NULL OR @AllowanceAmount IS NULL OR @CreatedBy IS NULL
+    BEGIN
+        SELECT 'One of the inputs is null' AS Message;
+        RETURN;
+    END
 
+    IF @AllowanceAmount < 0
+    BEGIN
+        SELECT 'Allowance amount cannot be negative' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM HRAdministrator WHERE employee_id = @CreatedBy)
+    BEGIN
+        SELECT 'Creator is not an HR Administrator' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM ShiftSchedule WHERE type = @ShiftType)
+    BEGIN
+        SELECT 'Shift type does not exist' AS Message;
+        RETURN;
+    END
+
+    INSERT INTO AllowanceDeduction (allowance_name, amount, shift_type, created_by)
+    VALUES ('Shift Differential', @AllowanceAmount, @ShiftType, @CreatedBy);
+
+    SELECT 'Shift allowance configured: ' + @ShiftType + ' = ' + CAST(@AllowanceAmount AS VARCHAR) AS Message;
 END;
 
 GO
@@ -3570,5 +4004,6 @@ END;
 
 
 GO
+
 
 
