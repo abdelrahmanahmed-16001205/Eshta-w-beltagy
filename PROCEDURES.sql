@@ -2959,97 +2959,117 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE ReviewLeaveRequest @LeaveRequestID INT,
-                                    @ManagerID INT,
-                                    @Decision VARCHAR(20) AS
+```sql
+CREATE PROCEDURE ReviewLeaveRequest
+    @LeaveRequestID INT,
+    @ManagerID INT,
+    @Decision VARCHAR(20)
+AS
 BEGIN
+    SET NOCOUNT ON;
+
     BEGIN TRY
-        IF NOT EXISTS (SELECT 1
-                       FROM LeaveRequest
-                       WHERE request_id = @LeaveRequestID)
-            BEGIN
-                SELECT 'Leave request not found' AS Message;
+        IF NOT EXISTS (SELECT 1 FROM LeaveRequest WHERE request_id = @LeaveRequestID)
+        BEGIN
+            SELECT 'Leave request not found' AS Message;
+            RETURN;
+        END
 
-                RETURN;
+        IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @ManagerID)
+        BEGIN
+            SELECT 'Manager not found' AS Message;
+            RETURN;
+        END
 
-            END
-        IF NOT EXISTS (SELECT 1
-                       FROM Employee
-                       WHERE employee_id = @ManagerID)
-            BEGIN
-                SELECT 'Manager not found' AS Message;
+        IF @Decision NOT IN ('Approved', 'Rejected')
+        BEGIN
+            SELECT 'Invalid decision. Must be Approved or Rejected' AS Message;
+            RETURN;
+        END
 
-                RETURN;
-
-            END
-        IF @Decision NOT IN ('Approved', 'Rejected', 'Pending')
-            BEGIN
-                SELECT 'Invalid decision. Must be Approved, Rejected, or Pending' AS Message;
-
-                RETURN;
-
-            END
         DECLARE @EmployeeID INT,
-            @LeaveID INT,
-            @Duration INT;
+                @LeaveID INT,
+                @Duration INT;
 
-        SELECT @EmployeeID = employee_id,
-               @LeaveID = leave_id,
-               @Duration = duration
+        SELECT 
+            @EmployeeID = employee_id,
+            @LeaveID = leave_id,
+            @Duration = duration
         FROM LeaveRequest
         WHERE request_id = @LeaveRequestID;
 
+        IF NOT EXISTS (
+            SELECT 1 
+            FROM Employee e
+            WHERE e.employee_id = @EmployeeID 
+              AND e.manager_id = @ManagerID
+        )
+        BEGIN
+            SELECT 'Unauthorized: Manager is not the direct supervisor of the employee' AS Message;
+            RETURN;
+        END
+
         IF @Decision = 'Approved'
+        BEGIN
+            DECLARE @AvailableBalance DECIMAL(5, 2);
+
+            SELECT @AvailableBalance = ISNULL(entitlement, 0)
+            FROM LeaveEntitlement
+            WHERE employee_id = @EmployeeID
+              AND leave_type_id = @LeaveID;
+
+            IF @AvailableBalance < @Duration
             BEGIN
-                DECLARE @AvailableBalance DECIMAL(5, 2);
-
-                SELECT @AvailableBalance = entitlement
-                FROM LeaveEntitlement
-                WHERE employee_id = @EmployeeID
-                  AND leave_type_id = @LeaveID;
-
-                IF @AvailableBalance < @Duration
-                    BEGIN
-                        SELECT 'Cannot approve - insufficient leave balance' AS Message;
-
-                        RETURN;
-
-                    END
+                SELECT 'Cannot approve - insufficient leave balance' AS Message;
+                RETURN;
             END
+        END
+
         BEGIN TRANSACTION;
 
-        UPDATE
-            LeaveRequest
-        SET STATUS          = @Decision,
+        UPDATE LeaveRequest
+        SET 
+            STATUS = @Decision,
             approval_timing = GETDATE()
         WHERE request_id = @LeaveRequestID;
 
-        INSERT INTO Notification (message_content, urgency, notification_type)
-        VALUES ('Your leave request has been ' + @Decision,
-                'Normal',
-                'Leave');
+        DECLARE @NotificationID INT;
 
-        INSERT INTO Employee_Notification (employee_id,
-                                           notification_id,
-                                           delivery_status,
-                                           delivered_at)
-        VALUES (@EmployeeID,
-                SCOPE_IDENTITY(),
-                'Delivered',
-                GETDATE());
+        INSERT INTO Notification (message_content, urgency, notification_type)
+        VALUES (
+            'Your leave request has been ' + @Decision + '.',
+            'Normal',
+            'Leave'
+        );
+
+        SET @NotificationID = SCOPE_IDENTITY();
+
+        INSERT INTO Employee_Notification (
+            employee_id,
+            notification_id,
+            delivery_status,
+            delivered_at
+        )
+        VALUES (
+            @EmployeeID,
+            @NotificationID,
+            'Delivered',
+            GETDATE()
+        );
 
         COMMIT TRANSACTION;
 
         SELECT 'Leave request ' + @Decision AS Message;
 
-    END TRY BEGIN CATCH
-        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0
+            ROLLBACK TRANSACTION;
 
         SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
-
     END CATCH
 END;
-
+```
 GO
 CREATE PROCEDURE AssignShift @EmployeeID INT,
                              @ShiftID INT AS
@@ -4094,6 +4114,7 @@ END;
 
 
 GO
+
 
 
 
