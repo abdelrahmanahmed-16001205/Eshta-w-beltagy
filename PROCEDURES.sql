@@ -2228,12 +2228,12 @@ BEGIN
         SUM(p.net_salary) AS total_payroll,
         COUNT(p.payroll_id) AS employee_count,
         AVG(p.net_salary) AS average_salary
-    FROM Payroll p
-    INNER JOIN Employee e ON p.employee_id = e.employee_id
-    INNER JOIN Department d ON e.department_id = d.department_id
-    WHERE e.department_id = @DepartmentID
-      AND MONTH(p.period_start) = @Month
-      AND YEAR(p.period_start) = @Year
+    FROM Payroll p, Employee e, Department d
+    WHERE p.employee_id = e.employee_id
+      AND e.department_id = d.department_id
+      AND e.department_id = @DepartmentID
+      AND p.period_start >= CAST(CAST(@Year AS VARCHAR) + '-' + RIGHT('0' + CAST(@Month AS VARCHAR), 2) + '-01' AS DATE)
+      AND p.period_start < DATEADD(MONTH, 1, CAST(CAST(@Year AS VARCHAR) + '-' + RIGHT('0' + CAST(@Month AS VARCHAR), 2) + '-01' AS DATE))
     GROUP BY d.department_id, d.department_name;
 END;
 
@@ -2264,12 +2264,12 @@ BEGIN
         e.employee_id,
         e.full_name,
         d.department_name
-    FROM Employee e
-    INNER JOIN Department d ON e.department_id = d.department_id
-    INNER JOIN Attendance a ON e.employee_id = a.employee_id
-    WHERE a.entry_time IS NULL 
-       OR a.exit_time IS NULL
-       OR (CAST(a.entry_time AS DATE) BETWEEN @StartDate AND @EndDate)
+    FROM Employee e, Department d, Attendance a
+    WHERE e.employee_id = a.employee_id
+      AND e.department_id = d.department_id
+      AND e.manager_id IS NOT NULL
+      AND (a.entry_time IS NULL OR a.exit_time IS NULL)
+      AND CAST(a.entry_time AS DATE) BETWEEN @StartDate AND @EndDate
     ORDER BY e.employee_id;
 END;
 
@@ -3211,11 +3211,15 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE RequestReplacement @EmployeeID INT,
-                                    @Reason VARCHAR(150) AS
+CREATE PROCEDURE RequestReplacement
+    @EmployeeID INT,
+    @Reason VARCHAR(150)
+AS
 BEGIN
-    SELECT 'Replacement request submitted for employee ' + CAST(@EmployeeID AS VARCHAR) + ': ' + @Reason AS Message;
+    INSERT INTO ReplacementRequest (employee_id, reason, requested_at)
+    VALUES (@EmployeeID, @Reason, GETDATE());
 
+    SELECT 'Replacement request submitted for employee ' + CAST(@EmployeeID AS VARCHAR) + ': ' + @Reason AS Message;
 END;
 
 GO
@@ -3223,12 +3227,13 @@ CREATE PROCEDURE ViewDepartmentSummary
     @DepartmentID INT
 AS
 BEGIN
-    SELECT d.department_name,
-           (SELECT COUNT(*) FROM Employee e WHERE e.department_id = d.department_id) AS employee_count,
-           (SELECT COUNT(*) FROM Mission m, Employee e 
-            WHERE e.department_id = d.department_id 
-              AND m.employee_id = e.employee_id 
-              AND m.status = 'Approved') AS active_projects
+    SELECT 
+        d.department_name,
+        (SELECT COUNT(*) FROM Employee WHERE department_id = d.department_id) AS employee_count,
+        (SELECT COUNT(*) FROM Mission m, Employee e 
+         WHERE e.department_id = d.department_id 
+           AND m.employee_id = e.employee_id 
+           AND m.status = 'Approved') AS active_projects
     FROM Department d
     WHERE d.department_id = @DepartmentID;
 END;
@@ -3287,12 +3292,11 @@ BEGIN
 END;
 
 GO
-CCREATE PROCEDURE GetTeamSummary
+CREATE PROCEDURE GetTeamSummary
     @ManagerID INT
 AS
 BEGIN
-    SELECT r.role_name,
-           COUNT(e.employee_id) AS count
+    SELECT r.role_name, COUNT(e.employee_id) AS count
     FROM Employee e, Employee_Role er, Role r
     WHERE e.manager_id = @ManagerID
       AND e.employee_id = er.employee_id
@@ -3359,8 +3363,8 @@ BEGIN
 
     INSERT INTO Attendance (employee_id, shift_id, entry_time, exit_time, login_method, logout_method)
     VALUES (@EmployeeID, @ShiftID, 
-            CAST(CAST(@Date AS VARCHAR) + ' ' + CAST(@ClockIn AS VARCHAR) AS DATETIME),
-            CAST(CAST(@Date AS VARCHAR) + ' ' + CAST(@ClockOut AS VARCHAR) AS DATETIME),
+            CAST(@Date AS DATETIME) + CAST(@ClockIn AS DATETIME),
+            CAST(@Date AS DATETIME) + CAST(@ClockOut AS DATETIME),
             'Manual', 'Manual');
 
     DECLARE @AttendanceID INT = SCOPE_IDENTITY();
@@ -3651,10 +3655,10 @@ BEGIN
     FROM Employee
     WHERE employee_id = @EmployeeID
     UNION
-    SELECT 'Contract Change' AS event_type, start_date AS event_date, 'Contract started: ' + type AS description
-    FROM Contract c
-    INNER JOIN Employee e ON c.contract_id = e.contract_id
-    WHERE e.employee_id = @EmployeeID
+    SELECT 'Contract Change' AS event_type, start_date AS event_date, 'Contract started' AS description
+    FROM Contract c, Employee e
+    WHERE c.contract_id = e.contract_id
+      AND e.employee_id = @EmployeeID
     ORDER BY event_date DESC;
 END;
 GO
@@ -3723,13 +3727,10 @@ CREATE PROCEDURE LogFlexibleAttendance
     @CheckOut TIME
 AS
 BEGIN
-    DECLARE @TotalHours DECIMAL(5,2) = CAST(DATEDIFF(MINUTE, @CheckIn, @CheckOut) AS DECIMAL(5,2)) / 60;
+    INSERT INTO FlexibleAttendance (employee_id, date, check_in, check_out)
+    VALUES (@EmployeeID, @Date, @CheckIn, @CheckOut);
 
-    INSERT INTO FlexibleAttendance (employee_id, date, check_in, check_out, total_hours)
-    VALUES (@EmployeeID, @Date, @CheckIn, @CheckOut, @TotalHours);
-
-    SELECT 'Flexible attendance logged: ' + CAST(@TotalHours AS VARCHAR) + ' hours' AS Message,
-           @TotalHours AS TotalWorkingHours;
+    SELECT 'Flexible attendance logged successfully' AS Message;
 END;
 
 GO
@@ -3758,8 +3759,7 @@ BEGIN
     DECLARE @ShiftID INT;
     SELECT TOP 1 @ShiftID = shift_id
     FROM ShiftAssignment
-    WHERE employee_id = @EmployeeID AND status = 'Active'
-    ORDER BY start_date DESC;
+    WHERE employee_id = @EmployeeID AND status = 'Active';
 
     IF @Type = 'IN'
     BEGIN
@@ -3769,9 +3769,7 @@ BEGIN
     ELSE IF @Type = 'OUT'
     BEGIN
         UPDATE Attendance
-        SET exit_time = @ClockInOutTime,
-            logout_method = 'Self-Service',
-            duration = DATEDIFF(MINUTE, entry_time, @ClockInOutTime)
+        SET exit_time = @ClockInOutTime, logout_method = 'Self-Service'
         WHERE employee_id = @EmployeeID
           AND CAST(entry_time AS DATE) = CAST(@ClockInOutTime AS DATE)
           AND exit_time IS NULL;
@@ -3803,7 +3801,7 @@ BEGIN
     FROM AttendanceCorrectionRequest
     WHERE employee_id = @EmployeeID
     UNION
-    SELECT 'Leave Request' AS request_type, request_id, NULL AS date, status
+    SELECT 'Leave Request' AS request_type, request_id, CAST(NULL AS DATE) AS date, status
     FROM LeaveRequest
     WHERE employee_id = @EmployeeID
     ORDER BY status, request_id DESC;
@@ -3907,6 +3905,7 @@ BEGIN
 
     SELECT 'Leave status notification sent' AS Message;
 END;
+
 
 
 
