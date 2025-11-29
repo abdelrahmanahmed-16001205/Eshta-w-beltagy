@@ -438,7 +438,7 @@ CREATE TABLE Attendance
 
 CREATE TABLE AttendanceLog
 (
-    attendance_log_id INT NOT NULL IDENTITY(1,1),
+    attendance_log_id INT NOT NULL IDENTITY (1,1),
     attendance_id     INT NOT NULL,
     actor             INT NOT NULL,
     timestamp         DATETIME DEFAULT GETDATE(),

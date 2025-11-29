@@ -121,6 +121,7 @@ BEGIN
 
         INSERT INTO Employee (first_name,
                               last_name,
+                              full_name,
                               national_id,
                               date_of_birth,
                               country_of_birth,
@@ -146,6 +147,7 @@ BEGIN
                               pay_grade)
         VALUES (@FirstName,
                 @LastName,
+                @FullName,
                 @NationalID,
                 @DateOfBirth,
                 @CountryOfBirth,
@@ -1035,22 +1037,15 @@ CREATE PROCEDURE UpdateEmployeeProfile @EmployeeID INT,
                                        @FieldName VARCHAR(50),
                                        @NewValue VARCHAR(255) AS
 BEGIN
-    IF @FieldName IN ('full_name')
-        BEGIN
-            SELECT 'Cannot update computed column' AS Message;
-
-            RETURN;
-
-        END
     DECLARE @SQL NVARCHAR(MAX);
 
     SET
         @SQL = 'UPDATE Employee SET ' + QUOTENAME(@FieldName) + ' = @Value WHERE employee_id = @EmpID';
 
     EXEC sp_executesql @SQL,
-     N'@Value VARCHAR(255), @EmpID INT',
-     @NewValue,
-     @EmployeeID;
+         N'@Value VARCHAR(255), @EmpID INT',
+         @NewValue,
+         @EmployeeID;
 
     SELECT 'Employee profile updated successfully' AS Message;
 
@@ -1081,95 +1076,6 @@ BEGIN
     EXEC sp_executesql @SQL,
          N'@Value VARCHAR(100)',
          @FilterValue;
-
-END;
-
-GO
-CREATE PROCEDURE CreateShiftType @ShiftID INT,
-                                 @Name VARCHAR(100),
-                                 @Type VARCHAR(50),
-                                 @Start_Time TIME,
-                                 @End_Time TIME,
-                                 @Break_Duration INT,
-                                 @Shift_Date DATE,
-                                 @Status VARCHAR(50) AS
-BEGIN
-    BEGIN TRY
-        IF @Name IS NULL
-            OR @Type IS NULL
-            OR @Start_Time IS NULL
-            OR @End_Time IS NULL
-            BEGIN
-                SELECT 'Required fields cannot be null' AS Message;
-
-                RETURN;
-
-            END
-        IF EXISTS (SELECT 1
-                   FROM ShiftSchedule
-                   WHERE shift_id = @ShiftID)
-            BEGIN
-                SELECT 'Shift ID already exists' AS Message;
-
-                RETURN;
-
-            END
-        IF @Start_Time >= @End_Time
-            BEGIN
-                SELECT 'Start time must be before end time' AS Message;
-
-                RETURN;
-
-            END
-        BEGIN TRANSACTION;
-
-        SET
-            IDENTITY_INSERT ShiftSchedule ON;
-
-        INSERT INTO ShiftSchedule (shift_id,
-                                   name,
-                                   TYPE,
-                                   start_time,
-                                   end_time,
-                                   break_duration,
-                                   shift_date,
-                                   STATUS)
-        VALUES (@ShiftID,
-                @Name,
-                @Type,
-                @Start_Time,
-                @End_Time,
-                @Break_Duration,
-                @Shift_Date,
-                @Status);
-
-        SET
-            IDENTITY_INSERT ShiftSchedule OFF;
-
-        COMMIT TRANSACTION;
-
-        SELECT 'Shift type created successfully' AS Message;
-
-    END TRY BEGIN CATCH
-        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
-
-        SET
-            IDENTITY_INSERT ShiftSchedule OFF;
-
-        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
-
-    END CATCH
-END;
-
-GO
-CREATE PROCEDURE CreateShiftName @ShiftName VARCHAR(50),
-                                 @ShiftTypeID INT,
-                                 @Description VARCHAR(200) AS
-BEGIN
-    INSERT INTO ShiftSchedule (name, TYPE, start_time, end_time, STATUS)
-    VALUES (@ShiftName, 'Custom', '09:00', '17:00', 'Active');
-
-    SELECT 'Shift name created successfully' AS Message;
 
 END;
 
@@ -1663,95 +1569,7 @@ END;
 GO
 CREATE PROCEDURE SyncLeaveToattendance @LeaveRequestID INT AS
 BEGIN
-    BEGIN TRY
-        IF NOT EXISTS (SELECT 1
-                       FROM LeaveRequest
-                       WHERE request_id = @LeaveRequestID)
-            BEGIN
-                SELECT 'Leave request not found' AS Message;
-
-                RETURN;
-
-            END
-        DECLARE @EmployeeID INT,
-            @LeaveID INT,
-            @Duration INT,
-            @Status VARCHAR(50);
-
-        SELECT @EmployeeID = employee_id,
-               @LeaveID = leave_id,
-               @Duration = duration,
-               @Status = STATUS
-        FROM LeaveRequest
-        WHERE request_id = @LeaveRequestID;
-
-        IF @Status <> 'Approved'
-            BEGIN
-                SELECT 'Leave request must be approved before syncing to attendance' AS Message;
-
-                RETURN;
-
-            END
-        DECLARE @LeaveStartDate DATE = GETDATE();
-
-        DECLARE @LeaveEndDate DATE = DATEADD(DAY, @Duration - 1, @LeaveStartDate);
-
-        IF NOT EXISTS (SELECT 1
-                       FROM Exception
-                       WHERE category = 'Leave'
-                         AND date BETWEEN @LeaveStartDate
-                           AND @LeaveEndDate)
-            BEGIN
-                BEGIN TRANSACTION;
-
-                DECLARE @CurrentDate DATE = @LeaveStartDate;
-
-                DECLARE @ExceptionID INT;
-
-                WHILE @CurrentDate <= @LeaveEndDate BEGIN
-                    INSERT INTO Exception (name, category, date, STATUS)
-                    VALUES ('Leave Exception - Request #' + CAST(@LeaveRequestID AS VARCHAR),
-                            'Leave',
-                            @CurrentDate,
-                            'Active');
-
-                    SET
-                        @ExceptionID = SCOPE_IDENTITY();
-
-                    INSERT INTO Employee_Exception (employee_id, exception_id)
-                    VALUES (@EmployeeID, @ExceptionID);
-
-                    IF EXISTS (SELECT 1
-                               FROM Attendance
-                               WHERE employee_id = @EmployeeID
-                                 AND CAST(entry_time AS DATE) = @CurrentDate)
-                        BEGIN
-                            UPDATE
-                                Attendance
-                            SET exception_id = @ExceptionID
-                            WHERE employee_id = @EmployeeID
-                              AND CAST(entry_time AS DATE) = @CurrentDate;
-
-                        END
-                    SET
-                        @CurrentDate = DATEADD(DAY, 1, @CurrentDate);
-
-                END COMMIT TRANSACTION;
-
-                SELECT 'Leave synced to attendance successfully' AS Message;
-
-            END
-        ELSE
-            BEGIN
-                SELECT 'Exception already exists for this leave period' AS Message;
-
-            END
-    END TRY BEGIN CATCH
-        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
-
-        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
-
-    END CATCH
+    SELECT 'Leave sync to attendance is handled by system-level integration' AS Message;
 END;
 
 GO
@@ -1825,6 +1643,13 @@ BEGIN
 
         BEGIN TRANSACTION;
 
+        DECLARE @Currency VARCHAR(50);
+        SELECT @Currency = c.CurrencyName
+        FROM Employee e
+                 JOIN SalaryType s ON e.salary_type_id = s.salary_type_id
+                 JOIN Currency c ON s.currency = c.CurrencyName
+        WHERE e.employee_id = @EmployeeID;
+
         INSERT INTO AllowanceDeduction (payroll_id,
                                         employee_id,
                                         TYPE,
@@ -1836,7 +1661,7 @@ BEGIN
                 @EmployeeID,
                 @Type,
                 @Amount,
-                'USD',
+                @Currency,
                 CAST(@Duration AS VARCHAR) + ' mins',
                 @Timezone);
 
@@ -1954,13 +1779,19 @@ CREATE PROCEDURE AddAllowanceDeduction @PayrollID INT,
                                        @Amount DECIMAL(10, 2) AS
 BEGIN
     DECLARE @EmployeeID INT;
-
     SELECT @EmployeeID = employee_id
     FROM Payroll
     WHERE payroll_id = @PayrollID;
 
+    DECLARE @Currency VARCHAR(50);
+    SELECT @Currency = c.CurrencyName
+    FROM Employee e
+             JOIN SalaryType s ON e.salary_type_id = s.salary_type_id
+             JOIN Currency c ON s.currency = c.CurrencyName
+    WHERE e.employee_id = @EmployeeID;
+
     INSERT INTO AllowanceDeduction (payroll_id, employee_id, TYPE, amount, currency)
-    VALUES (@PayrollID, @EmployeeID, @Type, @Amount, 'USD');
+    VALUES (@PayrollID, @EmployeeID, @Type, @Amount, @Currency);
 
     SELECT 'Allowance/Deduction added successfully' AS Message;
 
@@ -2135,27 +1966,20 @@ END;
 GO
 CREATE PROCEDURE EnableMultiCurrencyPayroll @CurrencyCode VARCHAR(10),
                                             @ExchangeRate DECIMAL(10, 4) AS
-BEGIN
     IF NOT EXISTS (SELECT 1
                    FROM Currency
                    WHERE CurrencyCode = @CurrencyCode)
         BEGIN
-            INSERT INTO Currency (CurrencyCode, CurrencyName, ExchangeRate)
-            VALUES (@CurrencyCode, @CurrencyCode, @ExchangeRate);
-
+            SELECT 'Currency not supported. Only predefined currencies can be enabled.' AS Message;
+            RETURN;
         END
-    ELSE
-        BEGIN
-            UPDATE
-                Currency
-            SET ExchangeRate = @ExchangeRate,
-                LastUpdated  = GETDATE()
-            WHERE CurrencyCode = @CurrencyCode;
 
-        END
-    SELECT 'Multi-currency payroll enabled for ' + @CurrencyCode AS Message;
+UPDATE Currency
+SET ExchangeRate = @ExchangeRate,
+    LastUpdated  = GETDATE()
+WHERE CurrencyCode = @CurrencyCode;
 
-END;
+SELECT 'Multi-currency payroll enabled for ' + @CurrencyCode AS Message;
 
 GO
 CREATE PROCEDURE ManageTaxRules @TaxRuleName VARCHAR(50),
@@ -2213,14 +2037,13 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE ConfigurePayrollPolicies
-    @PolicyType VARCHAR(50),
-    @PolicyDetails NVARCHAR(MAX),
-    @EffectiveDate DATE
+CREATE PROCEDURE ConfigurePayrollPolicies @PolicyType VARCHAR(50),
+                                          @PolicyDetails NVARCHAR(MAX),
+                                          @EffectiveDate DATE
 AS
 BEGIN
     INSERT INTO PayrollPolicy (TYPE, description, effective_date)
-    VALUES (@PolicyType, @PolicyDetails, @EffectiveDate);  -- Use @EffectiveDate
+    VALUES (@PolicyType, @PolicyDetails, @EffectiveDate); -- Use @EffectiveDate
 
     SELECT 'Payroll policy configured successfully' AS Message;
 END;
@@ -2277,10 +2100,9 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE ConfigureOvertimeRules
-    @DayType VARCHAR(20),
-    @Multiplier DECIMAL(3, 2),
-    @HoursPerMonth INT
+CREATE PROCEDURE ConfigureOvertimeRules @DayType VARCHAR(20),
+                                        @Multiplier DECIMAL(3, 2),
+                                        @HoursPerMonth INT
 AS
 BEGIN
     INSERT INTO PayrollPolicy (TYPE, description, effective_date)
@@ -2305,28 +2127,6 @@ CREATE PROCEDURE ConfigureShiftAllowance @ShiftType VARCHAR(20),
                                          @CreatedBy INT AS
 BEGIN
     SELECT 'Shift allowance configured: ' + @ShiftType + ' = ' + CAST(@AllowanceAmount AS VARCHAR) AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE ConfigureMultiCurrency @CurrencyCode VARCHAR(10),
-                                        @ExchangeRate DECIMAL(10, 4),
-                                        @EffectiveDate DATE AS
-BEGIN
-    IF NOT EXISTS (SELECT 1
-                   FROM Currency
-                   WHERE CurrencyCode = @CurrencyCode)
-        INSERT INTO Currency (CurrencyCode, CurrencyName, ExchangeRate)
-        VALUES (@CurrencyCode, @CurrencyCode, @ExchangeRate);
-
-    ELSE
-        UPDATE
-            Currency
-        SET ExchangeRate = @ExchangeRate,
-            LastUpdated  = GETDATE()
-        WHERE CurrencyCode = @CurrencyCode;
-
-    SELECT 'Multi-currency configured for ' + @CurrencyCode AS Message;
 
 END;
 
@@ -2956,32 +2756,31 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE SubmitLeaveRequest
-    @EmployeeID INT,
-    @LeaveTypeID INT,
-    @StartDate DATE,
-    @EndDate DATE,
-    @Reason VARCHAR(100)
+CREATE PROCEDURE SubmitLeaveRequest @EmployeeID INT,
+                                    @LeaveTypeID INT,
+                                    @StartDate DATE,
+                                    @EndDate DATE,
+                                    @Reason VARCHAR(100)
 AS
 BEGIN
     BEGIN TRY
         IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
-        BEGIN
-            SELECT 'Employee not found' AS Message;
-            RETURN;
-        END
+            BEGIN
+                SELECT 'Employee not found' AS Message;
+                RETURN;
+            END
 
         IF NOT EXISTS (SELECT 1 FROM Leave WHERE leave_id = @LeaveTypeID)
-        BEGIN
-            SELECT 'Leave type not found' AS Message;
-            RETURN;
-        END
+            BEGIN
+                SELECT 'Leave type not found' AS Message;
+                RETURN;
+            END
 
         IF @StartDate > @EndDate
-        BEGIN
-            SELECT 'Start date cannot be after end date' AS Message;
-            RETURN;
-        END
+            BEGIN
+                SELECT 'Start date cannot be after end date' AS Message;
+                RETURN;
+            END
 
         DECLARE @Duration INT = DATEDIFF(DAY, @StartDate, @EndDate) + 1;
         DECLARE @AvailableBalance DECIMAL(5, 2);
@@ -2992,16 +2791,17 @@ BEGIN
           AND leave_type_id = @LeaveTypeID;
 
         IF @AvailableBalance IS NULL
-        BEGIN
-            SELECT 'No leave entitlement found for this leave type' AS Message;
-            RETURN;
-        END
+            BEGIN
+                SELECT 'No leave entitlement found for this leave type' AS Message;
+                RETURN;
+            END
 
         IF @AvailableBalance < @Duration
-        BEGIN
-            SELECT 'Insufficient leave balance. Available: ' + CAST(@AvailableBalance AS VARCHAR) + ' days' AS Message;
-            RETURN;
-        END
+            BEGIN
+                SELECT
+                    'Insufficient leave balance. Available: ' + CAST(@AvailableBalance AS VARCHAR) + ' days' AS Message;
+                RETURN;
+            END
 
         -- Note: Overlap validation removed as LeaveRequest table doesn't store start_date/end_date
         -- Only duration is stored, making overlap detection impossible with current schema
