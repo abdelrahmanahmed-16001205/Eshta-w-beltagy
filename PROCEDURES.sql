@@ -803,8 +803,7 @@ CREATE PROCEDURE CreateContract @EmployeeID INT,
                                 @Type VARCHAR(50),
                                 @StartDate DATE,
                                 @EndDate DATE AS
-BEGIN
-    BEGIN TRY
+BEGIN        
         IF NOT EXISTS (SELECT 1
                        FROM Employee
                        WHERE employee_id = @EmployeeID)
@@ -834,31 +833,19 @@ BEGIN
                 RETURN;
 
             END
-        BEGIN TRANSACTION;
-
-        DECLARE @ContractID INT;
+    
 
         INSERT INTO Contract (TYPE, start_date, end_date, current_state)
         VALUES (@Type, @StartDate, @EndDate, 'Active');
 
-        SET
-            @ContractID = SCOPE_IDENTITY();
+        Declare
+            @ContractID INT = SCOPE_IDENTITY();
 
         UPDATE
             Employee
         SET contract_id = @ContractID
         WHERE employee_id = @EmployeeID;
-
-        COMMIT TRANSACTION;
-
         SELECT 'Contract created successfully' AS Message;
-
-    END TRY BEGIN CATCH
-        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
-
-        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
-
-    END CATCH
 END;
 
 GO
@@ -933,8 +920,7 @@ BEGIN
 
                     END
             END
-        BEGIN TRANSACTION;
-
+                        
         UPDATE
             LeaveRequest
         SET STATUS          = @Status,
@@ -957,16 +943,8 @@ BEGIN
                 'Delivered',
                 GETDATE());
 
-        COMMIT TRANSACTION;
-
         SELECT 'Leave request ' + @Status AS Message;
 
-    END TRY BEGIN CATCH
-        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
-
-        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
-
-    END CATCH
 END;
 
 GO
@@ -1009,14 +987,13 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE GetActiveContracts AS
+CREATE PROCEDURE GetActiveContracts
+AS
 BEGIN
-    SELECT c.*,
-           e.full_name AS employee_name
-    FROM Contract c
-             INNER JOIN Employee e ON c.contract_id = e.contract_id
-    WHERE c.current_state = 'Active';
-
+    SELECT c.*, e.full_name AS employee_name
+    FROM Contract c, Employee e
+    WHERE c.contract_id = e.contract_id
+      AND c.current_state = 'Active';
 END;
 
 GO
@@ -1052,7 +1029,7 @@ BEGIN
     FROM Contract c
              INNER JOIN Employee e ON c.contract_id = e.contract_id
     WHERE c.end_date IS NOT NULL
-      AND DATEDIFF(DAY, GETDATE(), c.end_date) <= @DaysBefore
+      AND c.end_date <= GETDATE() + @DaysBefore
       AND c.current_state = 'Active';
 
 END;
@@ -1082,7 +1059,6 @@ CREATE PROCEDURE CreateEmployeeProfile @FirstName VARCHAR(50),
                                        @DateOfBirth DATE,
                                        @CountryOfBirth VARCHAR(100) AS
 BEGIN
-    BEGIN TRY
         IF @FirstName IS NULL
             OR @LastName IS NULL
             OR @Email IS NULL
@@ -1130,9 +1106,7 @@ BEGIN
                 RETURN;
 
             END
-        BEGIN TRANSACTION;
 
-        DECLARE @EmployeeID INT;
 
         INSERT INTO Employee (first_name,
                               last_name,
@@ -1153,23 +1127,13 @@ BEGIN
                 @DepartmentID,
                 @HireDate);
 
-        SET
-            @EmployeeID = SCOPE_IDENTITY();
+        Declare
+            @EmployeeID INT = SCOPE_IDENTITY();
 
         INSERT INTO Employee_Role (employee_id, role_id)
         VALUES (@EmployeeID, @RoleID);
 
-        COMMIT TRANSACTION;
-
         SELECT 'Employee profile created with ID: ' + CAST(@EmployeeID AS VARCHAR) AS Message,
-               @EmployeeID                                                         AS EmployeeID;
-
-    END TRY BEGIN CATCH
-        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
-
-        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
-
-    END CATCH
 END;
 
 GO
@@ -1177,7 +1141,7 @@ CREATE PROCEDURE UpdateEmployeeProfile @EmployeeID INT,
                                        @FieldName VARCHAR(50),
                                        @NewValue VARCHAR(255) AS
 BEGIN
-    DECLARE @SQL NVARCHAR(MAX);
+
 
     SET
         @SQL = 'UPDATE Employee SET ' + QUOTENAME(@FieldName) + ' = @Value WHERE employee_id = @EmpID';
@@ -1226,7 +1190,6 @@ CREATE PROCEDURE AssignRotationalShift @EmployeeID INT,
                                        @EndDate DATE,
                                        @Status VARCHAR(20) AS
 BEGIN
-    BEGIN TRY
         IF NOT EXISTS (SELECT 1
                        FROM Employee
                        WHERE employee_id = @EmployeeID)
@@ -1252,60 +1215,22 @@ BEGIN
                 RETURN;
 
             END
-        BEGIN TRANSACTION;
 
         DECLARE @ShiftID INT;
+    SELECT TOP 1 @ShiftID = shift_id
+    FROM ShiftCycleAssignment
+    WHERE cycle_id = @ShiftCycle;
 
-        DECLARE cycle_cursor CURSOR FOR
-            SELECT shift_id
-            FROM ShiftCycleAssignment
-            WHERE cycle_id = @ShiftCycle
-            ORDER BY order_number;
+    IF @ShiftID IS NULL
+    BEGIN
+        SELECT 'No shifts found in cycle' AS Message;
+        RETURN;
+    END
 
-        OPEN cycle_cursor;
+    INSERT INTO ShiftAssignment (employee_id, shift_id, start_date, end_date, status)
+    VALUES (@EmployeeID, @ShiftID, @StartDate, @EndDate, @Status);
 
-        FETCH NEXT
-            FROM
-            cycle_cursor INTO @ShiftID;
-
-        WHILE @@FETCH_STATUS = 0 BEGIN
-            INSERT INTO ShiftAssignment (employee_id,
-                                         shift_id,
-                                         start_date,
-                                         end_date,
-                                         STATUS)
-            VALUES (@EmployeeID,
-                    @ShiftID,
-                    @StartDate,
-                    @EndDate,
-                    @Status);
-
-            FETCH NEXT
-                FROM
-                cycle_cursor INTO @ShiftID;
-
-        END
-        CLOSE cycle_cursor;
-
-        DEALLOCATE cycle_cursor;
-
-        COMMIT TRANSACTION;
-
-        SELECT 'Rotational shift assigned successfully' AS Message;
-
-    END TRY BEGIN CATCH
-        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
-
-        IF CURSOR_STATUS('global', 'cycle_cursor') >= -1
-            BEGIN
-                CLOSE cycle_cursor;
-
-                DEALLOCATE cycle_cursor;
-
-            END
-        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
-
-    END CATCH
+    SELECT 'Rotational shift assigned successfully' AS Message;
 END;
 
 GO
@@ -3521,3 +3446,4 @@ END;
 
 
 GO
+
