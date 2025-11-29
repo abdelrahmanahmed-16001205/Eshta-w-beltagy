@@ -1128,22 +1128,91 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE UpdateEmployeeProfile @EmployeeID INT,
-                                       @FieldName VARCHAR(50),
-                                       @NewValue VARCHAR(255) AS
+CREATE PROCEDURE UpdateEmployeeProfile
+    @EmployeeID INT,
+    @FieldName VARCHAR(50),
+    @NewValue VARCHAR(255)
+AS
 BEGIN
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
+    BEGIN
+        SELECT 'Employee not found' AS Message;
+        RETURN;
+    END
 
-
-    SET
-        @SQL = 'UPDATE Employee SET ' + QUOTENAME(@FieldName) + ' = @Value WHERE employee_id = @EmpID';
-
-    EXEC sp_executesql @SQL,
-         N'@Value VARCHAR(255), @EmpID INT',
-         @NewValue,
-         @EmployeeID;
+    IF @FieldName = 'first_name'
+    BEGIN
+        UPDATE Employee SET first_name = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'last_name'
+    BEGIN
+        UPDATE Employee SET last_name = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'email'
+    BEGIN
+        IF EXISTS (SELECT 1 FROM Employee WHERE email = @NewValue AND employee_id != @EmployeeID)
+        BEGIN
+            SELECT 'Email already exists' AS Message;
+            RETURN;
+        END
+        UPDATE Employee SET email = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'phone'
+    BEGIN
+        UPDATE Employee SET phone = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'address'
+    BEGIN
+        UPDATE Employee SET address = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'national_id'
+    BEGIN
+        IF EXISTS (SELECT 1 FROM Employee WHERE national_id = @NewValue AND employee_id != @EmployeeID)
+        BEGIN
+            SELECT 'National ID already exists' AS Message;
+            RETURN;
+        END
+        UPDATE Employee SET national_id = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'country_of_birth'
+    BEGIN
+        UPDATE Employee SET country_of_birth = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'emergency_contact_name'
+    BEGIN
+        UPDATE Employee SET emergency_contact_name = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'emergency_contact_phone'
+    BEGIN
+        UPDATE Employee SET emergency_contact_phone = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'relationship'
+    BEGIN
+        UPDATE Employee SET relationship = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'biography'
+    BEGIN
+        UPDATE Employee SET biography = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'employment_progress'
+    BEGIN
+        UPDATE Employee SET employment_progress = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'account_status'
+    BEGIN
+        UPDATE Employee SET account_status = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'employment_status'
+    BEGIN
+        UPDATE Employee SET employment_status = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE
+    BEGIN
+        SELECT 'Invalid field name' AS Message;
+        RETURN;
+    END
 
     SELECT 'Employee profile updated successfully' AS Message;
-
 END;
 
 GO
@@ -1160,18 +1229,73 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE GenerateProfileReport @FilterField VARCHAR(50),
-                                       @FilterValue VARCHAR(100) AS
+CREATE PROCEDURE GenerateProfileReport
+    @FilterField VARCHAR(50),
+    @FilterValue VARCHAR(100)
+AS
 BEGIN
-    DECLARE @SQL NVARCHAR(MAX);
+    IF @FilterField = 'department'
+    BEGIN
+        SELECT e.employee_id, e.full_name, e.email, e.phone, d.department_name
+        FROM Employee e, Department d
+        WHERE e.department_id = d.department_id
+          AND d.department_name = @FilterValue;
+    END
+    ELSE IF @FilterField = 'employment_status'
+    BEGIN
+        SELECT employee_id, full_name, email, phone, employment_status
+        FROM Employee
+        WHERE employment_status = @FilterValue;
+    END
+    ELSE IF @FilterField = 'country_of_birth'
+    BEGIN
+        SELECT employee_id, full_name, email, phone, country_of_birth
+        FROM Employee
+        WHERE country_of_birth = @FilterValue;
+    END
+    ELSE IF @FilterField = 'gender'
+    BEGIN
+        SELECT employee_id, full_name, email, phone, gender
+        FROM Employee
+        WHERE gender = @FilterValue;
+    END
+    ELSE
+    BEGIN
+        SELECT 'Unsupported filter field. Use: department, employment_status, country_of_birth, or gender.' AS Message;
+    END
+END;
 
-    SET
-        @SQL = 'SELECT * FROM Employee WHERE ' + QUOTENAME(@FilterField) + ' = @Value';
+CREATE PROCEDURE CreateShiftType
+    @Name VARCHAR(100),
+    @Type VARCHAR(50),
+    @Start_Time TIME,
+    @End_Time TIME,
+    @Break_Duration INT = NULL,
+    @Status VARCHAR(50) = 'Active'
+AS
+BEGIN
+    IF @Type NOT IN ('Normal', 'Split', 'Overnight', 'Mission', 'Flexible', 'Weekend', 'Holiday')
+    BEGIN
+        SELECT 'Invalid shift type. Allowed: Normal, Split, Overnight, Mission, Flexible, Weekend, Holiday' AS Message;
+        RETURN;
+    END
 
-    EXEC sp_executesql @SQL,
-         N'@Value VARCHAR(100)',
-         @FilterValue;
+    IF @Start_Time >= @End_Time AND @Type <> 'Overnight'
+    BEGIN
+        SELECT 'Start time must be before end time for non-overnight shifts.' AS Message;
+        RETURN;
+    END
 
+    IF @Status NOT IN ('Active', 'Inactive', 'Archived')
+    BEGIN
+        SELECT 'Invalid status. Allowed: Active, Inactive, Archived' AS Message;
+        RETURN;
+    END
+
+    INSERT INTO ShiftSchedule (name, type, start_time, end_time, break_duration, status)
+    VALUES (@Name, @Type, @Start_Time, @End_Time, @Break_Duration, @Status);
+
+    SELECT 'Shift type created successfully' AS Message;
 END;
 
 GO
@@ -1260,195 +1384,167 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE SetGracePeriod @Minutes INT AS
+CREATE PROCEDURE SetGracePeriod
+    @Minutes INT
+AS
 BEGIN
-    SELECT 'Grace period set to ' + CAST(@Minutes AS VARCHAR) + ' minutes' AS Message;
+    IF @Minutes < 0
+    BEGIN
+        SELECT 'Grace period cannot be negative' AS Message;
+        RETURN;
+    END
 
+    UPDATE SystemConfig
+    SET grace_minutes = @Minutes
+    WHERE config_id = 1;
+
+    IF @@ROWCOUNT = 0
+    BEGIN
+        INSERT INTO SystemConfig (config_id, grace_minutes)
+        VALUES (1, @Minutes);
+    END
+
+    SELECT 'Grace period set to ' + CAST(@Minutes AS VARCHAR) + ' minutes' AS Message;
 END;
 
 GO
-CREATE PROCEDURE DefinePenaltyThreshold @LateMinutes INT,
-                                        @DeductionType VARCHAR(50) AS
+CREATE PROCEDURE DefinePenaltyThreshold
+    @LateMinutes INT,
+    @DeductionType VARCHAR(50)
+AS
 BEGIN
-    IF @LateMinutes IS NULL OR @DeductionType IS NULL
-    BEGIN
-        PRINT 'One of the inputs is null'
-        RETURN
-    END
-    
     IF @LateMinutes <= 0
     BEGIN
         SELECT 'Late minutes must be greater than zero' AS Message;
         RETURN;
     END
-        IF @DeductionType NOT IN ('half-day', 'full-day', 'hourly', 'warning')
-    BEGIN
-        PRINT 'Invalid deduction type. Allowed: half-day, full-day, hourly, warning'
-        RETURN
-    END
-    SELECT 'Penalty threshold defined: ' + CAST(@LateMinutes AS VARCHAR) + ' minutes = ' + @DeductionType AS Message;
 
+    INSERT INTO PenaltyThreshold (late_minutes, deduction_type)
+    VALUES (@LateMinutes, @DeductionType);
+
+    SELECT 'Penalty threshold defined successfully' AS Message;
 END;
 
 GO
-CREATE PROCEDURE DefinePermissionLimits @MinHours INT,
-                                        @MaxHours INT AS
+CREATE PROCEDURE DefinePermissionLimits
+    @MinHours INT,
+    @MaxHours INT
+AS
 BEGIN
-   IF @MinHours IS NULL OR @MaxHours IS NULL
+    IF @MinHours < 0 OR @MaxHours < 0 OR @MinHours > @MaxHours
     BEGIN
-        PRINT 'One of the inputs is null'
-        RETURN
+        SELECT 'Invalid hour limits: Min >= 0 and Max >= Min' AS Message;
+        RETURN;
     END
-    
-    IF @MinHours < 0 OR @MaxHours < 0
-    BEGIN
-        PRINT 'Hours cannot be negative'
-        RETURN
-    END
-    
-    IF @MinHours > @MaxHours
-    BEGIN
-        PRINT 'Minimum hours cannot exceed maximum hours'
-        RETURN
-    END
-    
-    SELECT
-        'Permission limits set: Min=' + CAST(@MinHours AS VARCHAR) + ', Max=' + CAST(@MaxHours AS VARCHAR) AS Message;
-Select
-        'Permission limits set successfully' AS Message;
+
+    INSERT INTO PermissionLimit (min_hours, max_hours)
+    VALUES (@MinHours, @MaxHours);
+
+    SELECT 'Permission limits defined successfully' AS Message;
 END;
 
 GO
-CREATE PROCEDURE EscalatePendingRequests @Deadline DATETIME AS
+CREATE PROCEDURE EscalatePendingRequests
+    @Deadline DATETIME
+AS
 BEGIN
-    SELECT 'Pending requests escalated after deadline: ' + CAST(@Deadline AS VARCHAR) AS Message;
+    INSERT INTO EscalationLog (request_id, escalated_at)
+    SELECT lr.request_id, GETDATE()
+    FROM LeaveRequest lr
+    WHERE lr.status = 'Pending'
+      AND lr.submission_date < @Deadline;
 
+    SELECT 'Pending requests escalated successfully' AS Message;
 END;
 
 GO
-CREATE PROCEDURE LinkVacationToShift @VacationPackageID INT,
-                                     @EmployeeID INT AS
+CREATE PROCEDURE LinkVacationToShift
+    @VacationPackageID INT,
+    @EmployeeID INT
+AS
 BEGIN
-    IF @VacationPackageID IS NULL OR @EmployeeID IS NULL
+    IF NOT EXISTS (SELECT 1 FROM VacationPackage WHERE package_id = @VacationPackageID)
     BEGIN
-        PRINT 'One of the inputs is null'
-        RETURN
+        SELECT 'Vacation package not found' AS Message;
+        RETURN;
     END
-    
-    -- Validate employee exists (Lab 7-1a EXISTS pattern)
-    IF NOT EXISTS (
-        SELECT 1 
-        FROM Employee 
-        WHERE employee_id = @EmployeeID
-    )
+
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
     BEGIN
-        PRINT 'Employee ID does not exist'
-        RETURN
+        SELECT 'Employee not found' AS Message;
+        RETURN;
     END
-    
-    -- Validate vacation leave exists (Lab 7-1a pattern)
-    IF NOT EXISTS (
-        SELECT 1 
-        FROM VacationLeave 
-        WHERE leave_id = @VacationPackageID
-    )
-    BEGIN
-        PRINT 'Vacation package ID does not exist'
-        RETURN
-    END
-    
-    -- Check if employee already has active shift assignments (Lab 7-1a)
+
+    INSERT INTO VacationShiftLink (vacation_package_id, employee_id, linked_at)
+    VALUES (@VacationPackageID, @EmployeeID, GETDATE());
+
+    SELECT 'Vacation package linked to employee schedule successfully' AS Message;
+END;
+
+GO
+CREATE PROCEDURE ConfigureLeavePolicies
+AS
+BEGIN
+    INSERT INTO LeaveConfigurationLog (action, executed_at)
+    VALUES ('Initiated', GETDATE());
+
+    SELECT 'Leave configuration process initiated successfully' AS Message;
+END;
+
+GO
+CREATE PROCEDURE AuthenticateLeaveAdmin
+    @AdminID INT,
+    @Password VARCHAR(100)
+AS
+BEGIN
     IF EXISTS (
-        SELECT 1 
-        FROM ShiftAssignment 
-        WHERE employee_id = @EmployeeID 
-          AND status = 'Active'
+        SELECT 1
+        FROM LeaveAdministrator
+        WHERE admin_id = @AdminID
+          AND password_hash = HASHBYTES('SHA2_256', @Password)
     )
     BEGIN
-        -- Link vacation to employee's shift by creating leave request
-        INSERT INTO LeaveRequest (employee_id, leave_id, justification, duration, status)
-        VALUES (
-            @EmployeeID,
-            @VacationPackageID,
-            'Vacation package linked to shift schedule',
-            5,
-            'Approved'
-        )
-        
-        PRINT 'Vacation package linked to employee shift successfully'
+        SELECT 'Administrator authenticated successfully' AS Message;
     END
     ELSE
     BEGIN
-        PRINT 'Employee has no active shift assignment'
-        RETURN
+        SELECT 'Invalid administrator credentials' AS Message;
     END
-    
-    SELECT 'Vacation package linked to employee shift' AS Message
-END
-
 END;
 
 GO
-CREATE PROCEDURE ConfigureLeavePolicies AS
+CREATE PROCEDURE ApplyLeaveConfiguration
+AS
 BEGIN
-    SELECT 'Leave configuration process initiated' AS Message;
+    UPDATE SystemConfig
+    SET leave_config_applied = 1, config_applied_at = GETDATE()
+    WHERE config_id = 1;
 
-END;
-
-GO
-CREATE PROCEDURE AuthenticateLeaveAdmin @AdminID INT,
-                                        @Password VARCHAR(100) AS
-BEGIN
-    IF @AdminID IS NULL OR @Password IS NULL
+    IF @@ROWCOUNT = 0
     BEGIN
-        PRINT 'One of the inputs is null'
-        RETURN
+        INSERT INTO SystemConfig (config_id, leave_config_applied, config_applied_at)
+        VALUES (1, 1, GETDATE());
     END
-     IF EXISTS (
-        SELECT 1 
-        FROM HRAdministrator hr
-        INNER JOIN Employee e ON hr.employee_id = e.employee_id
-        WHERE hr.employee_id = @AdminID 
-          AND e.account_status = 'Active'
-    )
-DECLARE @ApprovalLevel VARCHAR(50)
-        SELECT @ApprovalLevel = approval_level
-        FROM HRAdministrator
-        WHERE employee_id = @AdminID
-        
-        IF @ApprovalLevel IN ('Senior', 'Manager', 'Director')
-        BEGIN
-            SELECT 'Administrator authenticated successfully' AS Message
-        END
 
-END;
-
-GO
-CREATE PROCEDURE ApplyLeaveConfiguration AS
-BEGIN
     SELECT 'Leave configuration applied successfully' AS Message;
-
 END;
 
 GO
-CREATE PROCEDURE UpdateLeaveEntitlements @EmployeeID INT AS
+CREATE PROCEDURE UpdateLeaveEntitlements
+    @EmployeeID INT
+AS
 BEGIN
-     IF @EmployeeID IS NULL
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
     BEGIN
-        PRINT 'Employee ID is required'
-        RETURN
+        SELECT 'Employee not found' AS Message;
+        RETURN;
     END
-    F NOT EXISTS (
-        SELECT 1 
-        FROM Employee 
-        WHERE employee_id = @EmployeeID
-    )
-    BEGIN
-        PRINT 'Employee ID does not exist'
-        RETURN
-    END
-    SELECT 'Leave entitlements updated for employee' AS Message;
 
+    UPDATE LeaveEntitlement
+    SET last_updated = GETDATE()
+    WHERE employee_id = @EmployeeID;
+
+    SELECT 'Leave entitlements updated successfully for employee' AS Message;
 END;
 
 GO
@@ -3436,150 +3532,108 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE RejectLeaveRequest @LeaveRequestID INT,
-                                    @ManagerID INT,
-                                    @Reason VARCHAR(200) AS
+CREATE PROCEDURE RejectLeaveRequest
+    @LeaveRequestID INT,
+    @ManagerID INT,
+    @Reason VARCHAR(200)
+AS
 BEGIN
-    UPDATE
-        LeaveRequest
-    SET STATUS          = 'Rejected',
+    UPDATE LeaveRequest
+    SET status = 'Rejected',
         approval_timing = GETDATE()
     WHERE request_id = @LeaveRequestID;
 
     DECLARE @EmployeeID INT;
-
     SELECT @EmployeeID = employee_id
     FROM LeaveRequest
     WHERE request_id = @LeaveRequestID;
 
     INSERT INTO Notification (message_content, urgency, notification_type)
-    VALUES ('Your leave request was rejected: ' + @Reason,
-            'Normal',
-            'Leave');
-
-    INSERT INTO Employee_Notification (employee_id,
-                                       notification_id,
-                                       delivery_status,
-                                       delivered_at)
-    VALUES (@EmployeeID,
-            SCOPE_IDENTITY(),
-            'Delivered',
-            GETDATE());
-
-    SELECT 'Leave request rejected: ' + @Reason AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE DelegateLeaveApproval @ManagerID INT,
-                                       @DelegateID INT,
-                                       @StartDate DATE,
-                                       @EndDate DATE AS
-BEGIN
-    SELECT 'Leave approval delegated from ' + CAST(@ManagerID AS VARCHAR) + ' to ' + CAST(@DelegateID AS VARCHAR) +
-           ' for period ' + CAST(@StartDate AS VARCHAR) + ' to ' + CAST(@EndDate AS VARCHAR) AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE FlagIrregularLeave @EmployeeID INT,
-                                    @ManagerID INT,
-                                    @PatternDescription VARCHAR(200) AS
-BEGIN
-    SELECT 'Irregular leave pattern flagged for employee ' + CAST(@EmployeeID AS VARCHAR) + ': ' +
-           @PatternDescription AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE NotifyNewLeaveRequest @ManagerID INT,
-                                       @RequestID INT AS
-BEGIN
-    INSERT INTO Notification (message_content, urgency, notification_type)
-    VALUES ('New leave request #' + CAST(@RequestID AS VARCHAR) + ' requires your approval',
-            'Normal',
-            'Leave');
+    VALUES ('Your leave request was rejected: ' + @Reason, 'Normal', 'Leave');
 
     DECLARE @NotificationID INT = SCOPE_IDENTITY();
+    INSERT INTO Employee_Notification (employee_id, notification_id, delivery_status, delivered_at)
+    VALUES (@EmployeeID, @NotificationID, 'Delivered', GETDATE());
 
-    INSERT INTO Employee_Notification (employee_id,
-                                       notification_id,
-                                       delivery_status,
-                                       delivered_at)
-    VALUES (@ManagerID,
-            @NotificationID,
-            'Delivered',
-            GETDATE());
-
-    SELECT 'Manager notified of new leave request' AS Message;
-
+    SELECT 'Leave request rejected: ' + @Reason AS Message;
 END;
 
 GO
-CREATE PROCEDURE SubmitLeaveRequest @EmployeeID INT,
-                                    @LeaveTypeID INT,
-                                    @StartDate DATE,
-                                    @EndDate DATE,
-                                    @Reason VARCHAR(100)
+CREATE PROCEDURE DelegateLeaveApproval
+    @ManagerID INT,
+    @DelegateID INT,
+    @StartDate DATE,
+    @EndDate DATE
 AS
 BEGIN
-    BEGIN TRY
-        IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
-            BEGIN
-                SELECT 'Employee not found' AS Message;
-                RETURN;
-            END
+    INSERT INTO LeaveApprovalDelegation (manager_id, delegate_id, start_date, end_date, status)
+    VALUES (@ManagerID, @DelegateID, @StartDate, @EndDate, 'Active');
 
-        IF NOT EXISTS (SELECT 1 FROM Leave WHERE leave_id = @LeaveTypeID)
-            BEGIN
-                SELECT 'Leave type not found' AS Message;
-                RETURN;
-            END
+    SELECT 'Leave approval delegated from ' + CAST(@ManagerID AS VARCHAR) + ' to ' + CAST(@DelegateID AS VARCHAR) +
+           ' for period ' + CAST(@StartDate AS VARCHAR) + ' to ' + CAST(@EndDate AS VARCHAR) AS Message;
+END;
 
-        IF @StartDate > @EndDate
-            BEGIN
-                SELECT 'Start date cannot be after end date' AS Message;
-                RETURN;
-            END
+GO
+CREATE PROCEDURE FlagIrregularLeave
+    @EmployeeID INT,
+    @ManagerID INT,
+    @PatternDescription VARCHAR(200)
+AS
+BEGIN
+    INSERT INTO IrregularLeaveFlag (employee_id, manager_id, description, flagged_at)
+    VALUES (@EmployeeID, @ManagerID, @PatternDescription, GETDATE());
 
-        DECLARE @Duration INT = DATEDIFF(DAY, @StartDate, @EndDate) + 1;
-        DECLARE @AvailableBalance DECIMAL(5, 2);
+    SELECT 'Irregular leave pattern flagged for employee ' + CAST(@EmployeeID AS VARCHAR) + ': ' +
+           @PatternDescription AS Message;
+END;
 
-        SELECT @AvailableBalance = entitlement
-        FROM LeaveEntitlement
-        WHERE employee_id = @EmployeeID
-          AND leave_type_id = @LeaveTypeID;
+GO
+CREATE PROCEDURE NotifyNewLeaveRequest
+    @ManagerID INT,
+    @RequestID INT
+AS
+BEGIN
+    INSERT INTO Notification (message_content, urgency, notification_type)
+    VALUES ('New leave request #' + CAST(@RequestID AS VARCHAR) + ' requires your approval', 'Normal', 'Leave');
 
-        IF @AvailableBalance IS NULL
-            BEGIN
-                SELECT 'No leave entitlement found for this leave type' AS Message;
-                RETURN;
-            END
+    DECLARE @NotificationID INT = SCOPE_IDENTITY();
+    INSERT INTO Employee_Notification (employee_id, notification_id, delivery_status, delivered_at)
+    VALUES (@ManagerID, @NotificationID, 'Delivered', GETDATE());
 
-        IF @AvailableBalance < @Duration
-            BEGIN
-                SELECT
-                    'Insufficient leave balance. Available: ' + CAST(@AvailableBalance AS VARCHAR) + ' days' AS Message;
-                RETURN;
-            END
+    SELECT 'Manager notified of new leave request' AS Message;
+END;
 
-        -- Note: Overlap validation removed as LeaveRequest table doesn't store start_date/end_date
-        -- Only duration is stored, making overlap detection impossible with current schema
+GO
+CREATE PROCEDURE SubmitLeaveRequest
+    @EmployeeID INT,
+    @LeaveTypeID INT,
+    @StartDate DATE,
+    @EndDate DATE,
+    @Reason VARCHAR(100)
+AS
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
+    BEGIN
+        SELECT 'Employee not found' AS Message;
+        RETURN;
+    END
 
-        BEGIN TRANSACTION;
+    IF NOT EXISTS (SELECT 1 FROM Leave WHERE leave_id = @LeaveTypeID)
+    BEGIN
+        SELECT 'Leave type not found' AS Message;
+        RETURN;
+    END
 
-        INSERT INTO LeaveRequest (employee_id, leave_id, justification, duration, STATUS)
-        VALUES (@EmployeeID, @LeaveTypeID, @Reason, @Duration, 'Pending');
+    IF @StartDate > @EndDate
+    BEGIN
+        SELECT 'Start date cannot be after end date' AS Message;
+        RETURN;
+    END
 
-        COMMIT TRANSACTION;
+    INSERT INTO LeaveRequest (employee_id, leave_id, justification, status)
+    VALUES (@EmployeeID, @LeaveTypeID, @Reason, 'Pending');
 
-        SELECT 'Leave request submitted successfully' AS Message;
-
-    END TRY
-    BEGIN CATCH
-        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
-        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
-    END CATCH
+    SELECT 'Leave request submitted successfully' AS Message;
 END;
 
 GO
@@ -4138,11 +4192,4 @@ BEGIN
     SELECT 'Leave status notification sent' AS Message;
 
 END;
-
-
-GO
-
-
-
-
 
