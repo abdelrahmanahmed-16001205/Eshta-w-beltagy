@@ -438,15 +438,15 @@ CREATE TABLE Attendance
 
 CREATE TABLE AttendanceLog
 (
-    attendance_log_id INT PRIMARY KEY IDENTITY (1, 1),
+    attendance_log_id INT NOT NULL IDENTITY(1,1),
     attendance_id     INT NOT NULL,
     actor             INT NOT NULL,
     timestamp         DATETIME DEFAULT GETDATE(),
     reason            varchar(max),
+    PRIMARY KEY (attendance_log_id, attendance_id),
     FOREIGN KEY (attendance_id) REFERENCES Attendance (attendance_id),
     FOREIGN KEY (actor) REFERENCES Employee (employee_id)
 );
-
 CREATE TABLE AttendanceCorrectionRequest
 (
     request_id      INT PRIMARY KEY IDENTITY (1, 1),
