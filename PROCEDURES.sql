@@ -419,39 +419,78 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE UpdateShiftStatus @ShiftAssignmentID INT,
-                                   @Status VARCHAR(20) AS
+CREATE PROCEDURE UpdateShiftStatus
+    @ShiftAssignmentID INT,
+    @Status VARCHAR(20)
+AS
 BEGIN
-    UPDATE
-        ShiftAssignment
+    SET NOCOUNT ON;
+
+    IF @ShiftAssignmentID IS NULL OR @Status IS NULL
+    BEGIN
+        SELECT 'ShiftAssignmentID and Status are required' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM ShiftAssignment WHERE assignment_id = @ShiftAssignmentID)
+    BEGIN
+        SELECT 'Shift assignment not found' AS Message;
+        RETURN;
+    END
+
+    IF @Status NOT IN ('Active', 'Inactive', 'Cancelled', 'Completed')
+    BEGIN
+        SELECT 'Invalid status. Allowed values: Active, Inactive, Cancelled, Completed' AS Message;
+        RETURN;
+    END
+
+    UPDATE ShiftAssignment
     SET STATUS = @Status
     WHERE assignment_id = @ShiftAssignmentID;
 
     SELECT 'Shift status updated successfully' AS Message;
-
 END;
 
 GO
-CREATE PROCEDURE AssignShiftToDepartment @DepartmentID INT,
-                                         @ShiftID INT,
-                                         @StartDate DATE,
-                                         @EndDate DATE AS
+CREATE PROCEDURE AssignShiftToDepartment
+    @DepartmentID INT,
+    @ShiftID INT,
+    @StartDate DATE,
+    @EndDate DATE
+AS
 BEGIN
-    INSERT INTO ShiftAssignment (employee_id,
-                                 shift_id,
-                                 start_date,
-                                 end_date,
-                                 STATUS)
-    SELECT employee_id,
-           @ShiftID,
-           @StartDate,
-           @EndDate,
-           'Active'
+    SET NOCOUNT ON;
+
+    IF @DepartmentID IS NULL OR @ShiftID IS NULL OR @StartDate IS NULL
+    BEGIN
+        SELECT 'DepartmentID, ShiftID, and StartDate are required' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Department WHERE department_id = @DepartmentID)
+    BEGIN
+        SELECT 'Department not found' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM ShiftSchedule WHERE shift_id = @ShiftID)
+    BEGIN
+        SELECT 'Shift not found' AS Message;
+        RETURN;
+    END
+
+    IF @EndDate IS NOT NULL AND @EndDate < @StartDate
+    BEGIN
+        SELECT 'End date cannot be earlier than start date' AS Message;
+        RETURN;
+    END
+
+    INSERT INTO ShiftAssignment (employee_id, shift_id, start_date, end_date, STATUS)
+    SELECT employee_id, @ShiftID, @StartDate, @EndDate, 'Active'
     FROM Employee
-    WHERE department_id = @DepartmentID;
+    WHERE department_id = @DepartmentID AND is_active = 1;
 
     SELECT 'Shift assigned to all employees in department' AS Message;
-
 END;
 
 GO
@@ -465,17 +504,29 @@ CREATE PROCEDURE AssignCustomShift
     @EndDate DATE 
 AS
 BEGIN
-    IF NOT EXISTS (SELECT 1 
-                   FROM Employee 
-                   WHERE employee_id = @EmployeeID)
+    SET NOCOUNT ON;
+
+    IF @EmployeeID IS NULL OR @ShiftName IS NULL OR @ShiftType IS NULL OR @StartTime IS NULL OR @EndTime IS NULL OR @StartDate IS NULL
+    BEGIN
+        SELECT 'Required parameters cannot be null' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
     BEGIN
         SELECT 'Employee not found' AS Message;
         RETURN;
     END
 
-    IF @StartDate > @EndDate
+    IF @EndDate IS NOT NULL AND @StartDate > @EndDate
     BEGIN
         SELECT 'Start date cannot be after end date' AS Message;
+        RETURN;
+    END
+
+    IF @StartTime = @EndTime
+    BEGIN
+        SELECT 'Start time and end time cannot be equal' AS Message;
         RETURN;
     END
 
@@ -493,81 +544,95 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE ConfigureSplitShift @ShiftName VARCHAR(50),
-                                     @FirstSlotStart TIME,
-                                     @FirstSlotEnd TIME,
-                                     @SecondSlotStart TIME,
-                                     @SecondSlotEnd TIME AS
+CREATE PROCEDURE ConfigureSplitShift
+    @ShiftName VARCHAR(50),
+    @FirstSlotStart TIME,
+    @FirstSlotEnd TIME,
+    @SecondSlotStart TIME,
+    @SecondSlotEnd TIME
+AS
 BEGIN
-    DECLARE @BreakDuration INT;
+    SET NOCOUNT ON;
 
-    SET
-        @BreakDuration = DATEDIFF(MINUTE, @FirstSlotEnd, @SecondSlotStart);
+    IF @ShiftName IS NULL OR @FirstSlotStart IS NULL OR @FirstSlotEnd IS NULL OR @SecondSlotStart IS NULL OR @SecondSlotEnd IS NULL
+    BEGIN
+        SELECT 'All parameters are required' AS Message;
+        RETURN;
+    END
 
-    INSERT INTO ShiftSchedule (name,
-                               TYPE,
-                               start_time,
-                               end_time,
-                               break_duration,
-                               STATUS)
-    VALUES (@ShiftName,
-            'Split',
-            @FirstSlotStart,
-            @SecondSlotEnd,
-            @BreakDuration,
-            'Active');
+    IF @FirstSlotStart >= @FirstSlotEnd OR @SecondSlotStart >= @SecondSlotEnd
+    BEGIN
+        SELECT 'Slot start time must be before end time' AS Message;
+        RETURN;
+    END
+
+    IF @FirstSlotEnd >= @SecondSlotStart
+    BEGIN
+        SELECT 'Second slot must start after first slot ends' AS Message;
+        RETURN;
+    END
+
+    DECLARE @BreakDuration INT = DATEDIFF(MINUTE, @FirstSlotEnd, @SecondSlotStart);
+
+    INSERT INTO ShiftSchedule (name, TYPE, start_time, end_time, break_duration, STATUS)
+    VALUES (@ShiftName, 'Split', @FirstSlotStart, @SecondSlotEnd, @BreakDuration, 'Active');
 
     SELECT 'Split shift configured successfully' AS Message;
-
 END;
 
 GO
-CREATE PROCEDURE EnableFirstInLastOut @Enable BIT AS
+CREATE PROCEDURE EnableFirstInLastOut
+    @Enable BIT
+AS
 BEGIN
-    SELECT 'First In/Last Out processing ' + IIF(@Enable = 1, 'enabled', 'disabled') AS Message;
+    SET NOCOUNT ON;
 
+    IF @Enable IS NULL
+    BEGIN
+        SELECT 'Enable parameter is required' AS Message;
+        RETURN;
+    END
+
+    SELECT 'First In/Last Out processing ' + IIF(@Enable = 1, 'enabled', 'disabled') AS Message;
 END;
 
 GO
 CREATE PROCEDURE TagAttendanceSource 
     @AttendanceID INT,
-    @SourceType VARCHAR(20),
+    @SourceType VARCHAR(50),
     @DeviceID INT,
     @Latitude DECIMAL(10, 7),
-    @Longitude DECIMAL(10, 7) 
+    @Longitude DECIMAL(10, 7)
 AS
 BEGIN
-    IF NOT EXISTS (SELECT 1 
-                   FROM Attendance 
-                    WHERE attendance_id = @AttendanceID)
+    SET NOCOUNT ON;
+
+    IF @AttendanceID IS NULL OR @SourceType IS NULL OR @DeviceID IS NULL
+    BEGIN
+        SELECT 'AttendanceID, SourceType, and DeviceID are required' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Attendance WHERE attendance_id = @AttendanceID)
     BEGIN
         SELECT 'Attendance record not found' AS Message;
         RETURN;
     END
 
-    IF EXISTS (SELECT 1 
-               FROM AttendanceSource 
-               WHERE attendance_id = @AttendanceID 
-               AND device_id = @DeviceID)
+    IF NOT EXISTS (SELECT 1 FROM Device WHERE device_id = @DeviceID)
+    BEGIN
+        SELECT 'Device not found' AS Message;
+        RETURN;
+    END
+
+    IF EXISTS (SELECT 1 FROM AttendanceSource WHERE attendance_id = @AttendanceID AND device_id = @DeviceID)
     BEGIN
         SELECT 'Attendance source already tagged for this device' AS Message;
         RETURN;
     END
 
-    INSERT INTO AttendanceSource (
-        attendance_id,
-        device_id,
-        source_type,
-        latitude,
-        longitude
-    )
-    VALUES (
-        @AttendanceID,
-        @DeviceID,
-        @SourceType,
-        @Latitude,
-        @Longitude
-    );
+    INSERT INTO AttendanceSource (attendance_id, device_id, source_type, latitude, longitude)
+    VALUES (@AttendanceID, @DeviceID, @SourceType, @Latitude, @Longitude);
 
     SELECT 'Attendance source tagged successfully' AS Message;
 END;
@@ -580,9 +645,21 @@ CREATE PROCEDURE SyncOfflineAttendance
     @Type VARCHAR(10) 
 AS
 BEGIN
-    IF NOT EXISTS (SELECT 1 
-                   FROM Employee
-                    WHERE employee_id = @EmployeeID)
+    SET NOCOUNT ON;
+
+    IF @DeviceID IS NULL OR @EmployeeID IS NULL OR @ClockTime IS NULL OR @Type IS NULL
+    BEGIN
+        SELECT 'All parameters are required' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Device WHERE device_id = @DeviceID)
+    BEGIN
+        SELECT 'Device not found' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
     BEGIN
         SELECT 'Employee not found' AS Message;
         RETURN;
@@ -595,12 +672,12 @@ BEGIN
     END
 
     DECLARE @ShiftID INT;
-
     SELECT TOP 1 @ShiftID = shift_id
     FROM ShiftAssignment
     WHERE employee_id = @EmployeeID
       AND STATUS = 'Active'
-      AND @ClockTime BETWEEN start_date AND ISNULL(end_date, '9999-12-31')
+      AND @ClockTime >= start_date
+      AND (end_date IS NULL OR @ClockTime <= end_date)
     ORDER BY start_date DESC;
 
     IF @ShiftID IS NULL
@@ -613,13 +690,19 @@ BEGIN
     BEGIN
         INSERT INTO Attendance (employee_id, shift_id, entry_time, login_method)
         VALUES (@EmployeeID, @ShiftID, @ClockTime, 'Offline Sync');
-        
+
+        DECLARE @NewAttendanceID INT = SCOPE_IDENTITY();
+
+        INSERT INTO AttendanceSource (attendance_id, device_id, source_type, latitude, longitude)
+        SELECT @NewAttendanceID, @DeviceID, 'Offline Device', d.latitude, d.longitude
+        FROM Device d
+        WHERE d.device_id = @DeviceID;
+
         SELECT 'Offline attendance synced successfully' AS Message;
     END
     ELSE IF @Type = 'OUT'
     BEGIN
         DECLARE @AttendanceID INT;
-
         SELECT TOP 1 @AttendanceID = attendance_id
         FROM Attendance
         WHERE employee_id = @EmployeeID
@@ -639,26 +722,55 @@ BEGIN
             duration = DATEDIFF(MINUTE, entry_time, @ClockTime)
         WHERE attendance_id = @AttendanceID;
 
+        INSERT INTO AttendanceSource (attendance_id, device_id, source_type, latitude, longitude)
+        SELECT @AttendanceID, @DeviceID, 'Offline Device', d.latitude, d.longitude
+        FROM Device d
+        WHERE d.device_id = @DeviceID
+          AND NOT EXISTS (SELECT 1 FROM AttendanceSource WHERE attendance_id = @AttendanceID AND device_id = @DeviceID);
+
         SELECT 'Offline attendance synced successfully' AS Message;
     END
 END;
 
 
 GO
-CREATE PROCEDURE LogAttendanceEdit @AttendanceID INT,
-                                   @EditedBy INT,
-                                   @OldValue DATETIME,
-                                   @NewValue DATETIME,
-                                   @EditTimestamp DATETIME AS
+CREATE PROCEDURE LogAttendanceEdit
+    @AttendanceID INT,
+    @EditedBy INT,
+    @OldValue DATETIME,
+    @NewValue DATETIME,
+    @EditTimestamp DATETIME
+AS
 BEGIN
+    SET NOCOUNT ON;
+
+    IF @AttendanceID IS NULL OR @EditedBy IS NULL OR @OldValue IS NULL OR @NewValue IS NULL OR @EditTimestamp IS NULL
+    BEGIN
+        SELECT 'All parameters are required' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Attendance WHERE attendance_id = @AttendanceID)
+    BEGIN
+        SELECT 'Attendance record not found' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EditedBy)
+    BEGIN
+        SELECT 'Editor employee not found' AS Message;
+        RETURN;
+    END
+
     INSERT INTO AttendanceLog (attendance_id, actor, timestamp, reason)
-    VALUES (@AttendanceID,
-            @EditedBy,
-            @EditTimestamp,
-            'Changed from ' + CAST(@OldValue AS VARCHAR) + ' to ' + CAST(@NewValue AS VARCHAR));
+    VALUES (
+        @AttendanceID,
+        @EditedBy,
+        @EditTimestamp,
+        'Changed from ' + CONVERT(VARCHAR, @OldValue, 120) + ' to ' + CONVERT(VARCHAR, @NewValue, 120)
+    );
 
     SELECT 'Attendance edit logged successfully' AS Message;
-
 END;
 
 GO
@@ -667,27 +779,28 @@ CREATE PROCEDURE ApplyHolidayOverrides
     @EmployeeID INT 
 AS
 BEGIN
-    IF NOT EXISTS (SELECT 1  
-                   FROM Exception 
-                    WHERE exception_id = @HolidayID)
+    SET NOCOUNT ON;
+
+    IF @HolidayID IS NULL OR @EmployeeID IS NULL
+    BEGIN
+        SELECT 'HolidayID and EmployeeID are required' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Exception WHERE exception_id = @HolidayID)
     BEGIN
         SELECT 'Holiday not found' AS Message;
         RETURN;
     END
-    
-    IF NOT EXISTS (SELECT 1 
-                    FROM Employee 
-                     WHERE employee_id = @EmployeeID)
+
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
     BEGIN
         SELECT 'Employee not found' AS Message;
         RETURN;
     END
-    
-    DECLARE @HolidayDate DATE;
 
-    SELECT @HolidayDate = date
-    FROM Exception
-    WHERE exception_id = @HolidayID;
+    DECLARE @HolidayDate DATE;
+    SELECT @HolidayDate = date FROM Exception WHERE exception_id = @HolidayID;
 
     UPDATE Attendance
     SET exception_id = @HolidayID
@@ -705,122 +818,164 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE ManageUserAccounts 
+CREATE PROCEDURE ManageUserAccounts
     @UserID INT,
     @Role VARCHAR(50),
-    @Action VARCHAR(20) 
+    @Action VARCHAR(20)
 AS
 BEGIN
+    SET NOCOUNT ON;
+
+    IF @UserID IS NULL OR @Role IS NULL OR @Action IS NULL
+    BEGIN
+        SELECT 'UserID, Role, and Action are required' AS Message;
+        RETURN;
+    END
+
     IF @Action NOT IN ('Create', 'Update', 'Delete')
     BEGIN
         SELECT 'Invalid action. Must be Create, Update, or Delete' AS Message;
         RETURN;
     END
 
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @UserID)
+    BEGIN
+        SELECT 'User (employee) not found' AS Message;
+        RETURN;
+    END
+
+    DECLARE @RoleID INT;
+    SELECT @RoleID = role_id FROM Role WHERE role_name = @Role;
+
+    IF @RoleID IS NULL
+    BEGIN
+        SELECT 'Role not found' AS Message;
+        RETURN;
+    END
+
     IF @Action = 'Create'
     BEGIN
-        IF EXISTS (SELECT 1 FROM UserAccount WHERE user_id = @UserID)
+        IF EXISTS (SELECT 1 FROM Employee_Role WHERE employee_id = @UserID AND role_id = @RoleID)
         BEGIN
-            SELECT 'User account already exists' AS Message;
+            SELECT 'User already has this role' AS Message;
             RETURN;
         END
 
-        INSERT INTO UserAccount (user_id, role, created_at, is_active)
-        VALUES (@UserID, @Role, GETDATE(), 1);
+        INSERT INTO Employee_Role (employee_id, role_id, assigned_date)
+        VALUES (@UserID, @RoleID, GETDATE());
 
-        SELECT 'User account created with role: ' + @Role AS Message;
+        SELECT 'User account role assigned: ' + @Role AS Message;
     END
     ELSE IF @Action = 'Update'
     BEGIN
-        IF NOT EXISTS (SELECT 1 FROM UserAccount WHERE user_id = @UserID)
+        IF NOT EXISTS (SELECT 1 FROM Employee_Role WHERE employee_id = @UserID)
         BEGIN
-            SELECT 'User account not found' AS Message;
+            SELECT 'User has no role assigned. Use Create instead.' AS Message;
             RETURN;
         END
 
-        UPDATE UserAccount
-        SET role = @Role,
-            updated_at = GETDATE()
-        WHERE user_id = @UserID;
+        UPDATE Employee_Role
+        SET role_id = @RoleID, assigned_date = GETDATE()
+        WHERE employee_id = @UserID;
 
-        SELECT 'User account updated with new role: ' + @Role AS Message;
+        SELECT 'User account role updated to: ' + @Role AS Message;
     END
     ELSE IF @Action = 'Delete'
     BEGIN
-        IF NOT EXISTS (SELECT 1 FROM UserAccount WHERE user_id = @UserID)
+        IF NOT EXISTS (SELECT 1 FROM Employee_Role WHERE employee_id = @UserID AND role_id = @RoleID)
         BEGIN
-            SELECT 'User account not found' AS Message;
+            SELECT 'User does not have the specified role' AS Message;
             RETURN;
         END
 
-        DELETE FROM UserAccount WHERE user_id = @UserID;
+        DELETE FROM Employee_Role
+        WHERE employee_id = @UserID AND role_id = @RoleID;
 
-        SELECT 'User account deleted' AS Message;
+        SELECT 'User account role removed: ' + @Role AS Message;
     END
 END;
 
 GO
-CREATE PROCEDURE CreateContract @EmployeeID INT,
-                                @Type VARCHAR(50),
-                                @StartDate DATE,
-                                @EndDate DATE AS
-BEGIN        
-        IF NOT EXISTS (SELECT 1
-                       FROM Employee
-                       WHERE employee_id = @EmployeeID)
-            BEGIN
-                SELECT 'Employee not found' AS Message;
+CREATE PROCEDURE CreateContract
+    @EmployeeID INT,
+    @Type VARCHAR(50),
+    @StartDate DATE,
+    @EndDate DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
 
-                RETURN;
+    IF @EmployeeID IS NULL OR @Type IS NULL OR @StartDate IS NULL
+    BEGIN
+        SELECT 'EmployeeID, Type, and StartDate are required' AS Message;
+        RETURN;
+    END
 
-            END
-        IF @StartDate > @EndDate
-            AND @EndDate IS NOT NULL
-            BEGIN
-                SELECT 'Start date cannot be after end date' AS Message;
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
+    BEGIN
+        SELECT 'Employee not found' AS Message;
+        RETURN;
+    END
 
-                RETURN;
+    IF @EndDate IS NOT NULL AND @StartDate > @EndDate
+    BEGIN
+        SELECT 'Start date cannot be after end date' AS Message;
+        RETURN;
+    END
 
-            END
-        IF @Type NOT IN (
-                         'Full-Time',
-                         'Part-Time',
-                         'Consultant',
-                         'Internship'
-            )
-            BEGIN
-                SELECT 'Invalid contract type' AS Message;
+    IF @Type NOT IN ('Full-Time', 'Part-Time', 'Consultant', 'Internship')
+    BEGIN
+        SELECT 'Invalid contract type' AS Message;
+        RETURN;
+    END
 
-                RETURN;
+    INSERT INTO Contract (TYPE, start_date, end_date, current_state)
+    VALUES (@Type, @StartDate, @EndDate, 'Active');
 
-            END
-    
+    DECLARE @ContractID INT = SCOPE_IDENTITY();
 
-        INSERT INTO Contract (TYPE, start_date, end_date, current_state)
-        VALUES (@Type, @StartDate, @EndDate, 'Active');
+    UPDATE Employee
+    SET contract_id = @ContractID
+    WHERE employee_id = @EmployeeID;
 
-        Declare
-            @ContractID INT = SCOPE_IDENTITY();
-
-        UPDATE
-            Employee
-        SET contract_id = @ContractID
-        WHERE employee_id = @EmployeeID;
-        SELECT 'Contract created successfully' AS Message;
+    SELECT 'Contract created successfully' AS Message;
 END;
 
 GO
-CREATE PROCEDURE RenewContract @ContractID INT,
-                               @NewEndDate DATE AS
+CREATE PROCEDURE RenewContract
+    @ContractID INT,
+    @NewEndDate DATE
+AS
 BEGIN
-    UPDATE
-        Contract
-    SET end_date      = @NewEndDate,
+    SET NOCOUNT ON;
+
+    IF @ContractID IS NULL OR @NewEndDate IS NULL
+    BEGIN
+        SELECT 'ContractID and NewEndDate are required' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Contract WHERE contract_id = @ContractID)
+    BEGIN
+        SELECT 'Contract not found' AS Message;
+        RETURN;
+    END
+
+    DECLARE @CurrentEndDate DATE;
+    SELECT @CurrentEndDate = end_date FROM Contract WHERE contract_id = @ContractID;
+
+    IF @CurrentEndDate IS NOT NULL AND @NewEndDate <= @CurrentEndDate
+    BEGIN
+        SELECT 'New end date must be later than the current end date' AS Message;
+        RETURN;
+    END
+
+    UPDATE Contract
+    SET end_date = @NewEndDate,
         current_state = 'Renewed'
     WHERE contract_id = @ContractID;
 
     SELECT 'Contract renewed successfully' AS Message;
-
 END;
 
 GO
