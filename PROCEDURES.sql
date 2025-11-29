@@ -11,254 +11,206 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE AddEmployee @FullName VARCHAR(200),
-                             @NationalID VARCHAR(50),
-                             @DateOfBirth DATE,
-                             @CountryOfBirth VARCHAR(100),
-                             @Phone VARCHAR(50),
-                             @Email VARCHAR(100),
-                             @Address VARCHAR(255),
-                             @EmergencyContactName VARCHAR(100),
-                             @EmergencyContactPhone VARCHAR(50),
-                             @Relationship VARCHAR(50),
-                             @Biography VARCHAR(MAX),
-                             @EmploymentProgress VARCHAR(100),
-                             @AccountStatus VARCHAR(50),
-                             @EmploymentStatus VARCHAR(50),
-                             @HireDate DATE,
-                             @IsActive BIT,
-                             @ProfileCompletion INT,
-                             @DepartmentID INT,
-                             @PositionID INT,
-                             @ManagerID INT,
-                             @ContractID INT,
-                             @TaxFormID INT,
-                             @SalaryTypeID INT,
-                             @PayGrade VARCHAR(50),
-                             @EmployeeID INT OUTPUT AS
+CREATE PROCEDURE AddEmployee
+    @FullName VARCHAR(200),
+    @NationalID VARCHAR(50),
+    @DateOfBirth DATE,
+    @CountryOfBirth VARCHAR(50),
+    @Phone VARCHAR(20),
+    @Email VARCHAR(100),
+    @Address VARCHAR(150),
+    @EmergencyContactName VARCHAR(100),
+    @EmergencyContactPhone VARCHAR(20),
+    @Relationship VARCHAR(50),
+    @Biography VARCHAR(MAX),
+    @EmploymentProgress VARCHAR(50),
+    @AccountStatus VARCHAR(20),
+    @EmploymentStatus VARCHAR(50),
+    @HireDate DATE,
+    @IsActive BIT,
+    @ProfileCompletion INT,
+    @DepartmentID INT,
+    @PositionID INT,
+    @ManagerID INT,
+    @ContractID INT,
+    @TaxFormID INT,
+    @SalaryTypeID INT,
+    @PayGrade INT,
+    @EmployeeID INT OUTPUT
+AS
 BEGIN
-        IF @FullName IS NULL
-            OR @Email IS NULL
-            OR @HireDate IS NULL
-            BEGIN
-                SELECT 'Required fields cannot be null' AS Message;
+    SET NOCOUNT ON;
 
-                RETURN;
+    IF @FullName IS NULL OR @Email IS NULL OR @HireDate IS NULL
+    BEGIN
+        SELECT 'Required fields cannot be null' AS Message;
+        RETURN;
+    END
 
-            END
-        IF EXISTS (SELECT 1
-                   FROM Employee
-                   WHERE email = @Email)
-            BEGIN
-                SELECT 'Email already exists' AS Message;
+    IF EXISTS (SELECT 1 FROM Employee WHERE email = @Email)
+    BEGIN
+        SELECT 'Email already exists' AS Message;
+        RETURN;
+    END
 
-                RETURN;
+    IF @NationalID IS NOT NULL AND EXISTS (SELECT 1 FROM Employee WHERE national_id = @NationalID)
+    BEGIN
+        SELECT 'National ID already exists' AS Message;
+        RETURN;
+    END
 
-            END
-        IF @NationalID IS NOT NULL
-            AND EXISTS (SELECT 1
-                        FROM Employee
-                        WHERE national_id = @NationalID)
-            BEGIN
-                SELECT 'National ID already exists' AS Message;
+    IF NOT EXISTS (SELECT 1 FROM Department WHERE department_id = @DepartmentID)
+    BEGIN
+        SELECT 'Department not found' AS Message;
+        RETURN;
+    END
 
-                RETURN;
+    IF NOT EXISTS (SELECT 1 FROM Position WHERE position_id = @PositionID)
+    BEGIN
+        SELECT 'Position not found' AS Message;
+        RETURN;
+    END
 
-            END
-        IF NOT EXISTS (SELECT 1
-                       FROM Department
-                       WHERE department_id = @DepartmentID)
-            BEGIN
-                SELECT 'Department not found' AS Message;
+    IF @ManagerID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @ManagerID)
+    BEGIN
+        SELECT 'Manager not found' AS Message;
+        RETURN;
+    END
 
-                RETURN;
+    IF @ContractID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Contract WHERE contract_id = @ContractID)
+    BEGIN
+        SELECT 'Contract not found' AS Message;
+        RETURN;
+    END
 
-            END
-        IF NOT EXISTS (SELECT 1
-                       FROM Position
-                       WHERE position_id = @PositionID)
-            BEGIN
-                SELECT 'Position not found' AS Message;
+    IF @TaxFormID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM TaxForm WHERE tax_form_id = @TaxFormID)
+    BEGIN
+        SELECT 'Tax form not found' AS Message;
+        RETURN;
+    END
 
-                RETURN;
+    IF @SalaryTypeID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM SalaryType WHERE salary_type_id = @SalaryTypeID)
+    BEGIN
+        SELECT 'Salary type not found' AS Message;
+        RETURN;
+    END
 
-            END
-        IF @ManagerID IS NOT NULL
-            AND NOT EXISTS (SELECT 1
-                            FROM Employee
-                            WHERE employee_id = @ManagerID)
-            BEGIN
-                SELECT 'Manager not found' AS Message;
+    IF @PayGrade IS NOT NULL AND NOT EXISTS (SELECT 1 FROM PayGrade WHERE pay_grade_id = @PayGrade)
+    BEGIN
+        SELECT 'Pay grade not found' AS Message;
+        RETURN;
+    END
 
-                RETURN;
+    DECLARE @FirstName VARCHAR(50), @LastName VARCHAR(50);
+    IF CHARINDEX(' ', @FullName) > 0
+    BEGIN
+        SET @FirstName = LEFT(@FullName, CHARINDEX(' ', @FullName) - 1);
+        SET @LastName = LTRIM(RIGHT(@FullName, LEN(@FullName) - CHARINDEX(' ', @FullName)));
+    END
+    ELSE
+    BEGIN
+        SET @FirstName = @FullName;
+        SET @LastName = '';
+    END
 
-            END
-        DECLARE @FirstName VARCHAR(50),
-            @LastName VARCHAR(50);
+    INSERT INTO Employee (
+        first_name, last_name, full_name, national_id, date_of_birth,
+        country_of_birth, phone, email, address, emergency_contact_name,
+        emergency_contact_phone, relationship, biography, employment_progress,
+        account_status, employment_status, hire_date, is_active, profile_completion,
+        department_id, position_id, manager_id, contract_id, tax_form_id,
+        salary_type_id, pay_grade
+    )
+    VALUES (
+        @FirstName, @LastName, @FullName, @NationalID, @DateOfBirth,
+        @CountryOfBirth, @Phone, @Email, @Address, @EmergencyContactName,
+        @EmergencyContactPhone, @Relationship, @Biography, @EmploymentProgress,
+        @AccountStatus, @EmploymentStatus, @HireDate, @IsActive, @ProfileCompletion,
+        @DepartmentID, @PositionID, @ManagerID, @ContractID, @TaxFormID,
+        @SalaryTypeID, @PayGrade
+    );
 
-        IF CHARINDEX(' ', @FullName) > 0
-            BEGIN
-                SET
-                    @FirstName = LEFT(@FullName, CHARINDEX(' ', @FullName) - 1);
-
-                SET
-                    @LastName = RIGHT(
-                            @FullName,
-                            DATALENGTH(@FullName) - CHARINDEX(' ', @FullName)
-                                );
-
-            END
-        ELSE
-            BEGIN
-                SET
-                    @FirstName = @FullName;
-
-                SET
-                    @LastName = '';
-
-            END
-
-        INSERT INTO Employee (first_name,
-                              last_name,
-                              full_name,
-                              national_id,
-                              date_of_birth,
-                              country_of_birth,
-                              phone,
-                              email,
-                              address,
-                              emergency_contact_name,
-                              emergency_contact_phone,
-                              relationship,
-                              biography,
-                              employment_progress,
-                              account_status,
-                              employment_status,
-                              hire_date,
-                              is_active,
-                              profile_completion,
-                              department_id,
-                              position_id,
-                              manager_id,
-                              contract_id,
-                              tax_form_id,
-                              salary_type_id,
-                              pay_grade)
-        VALUES (@FirstName,
-                @LastName,
-                @FullName,
-                @NationalID,
-                @DateOfBirth,
-                @CountryOfBirth,
-                @Phone,
-                @Email,
-                @Address,
-                @EmergencyContactName,
-                @EmergencyContactPhone,
-                @Relationship,
-                @Biography,
-                @EmploymentProgress,
-                @AccountStatus,
-                @EmploymentStatus,
-                @HireDate,
-                @IsActive,
-                @ProfileCompletion,
-                @DepartmentID,
-                @PositionID,
-                @ManagerID,
-                @ContractID,
-                @TaxFormID,
-                @SalaryTypeID,
-                @PayGrade);
-
-        SET
-            @EmployeeID = SCOPE_IDENTITY();
-
-
-        SELECT 'Employee added successfully with ID: ' + CAST(@EmployeeID AS VARCHAR(10)) AS Message;
-
+    SET @EmployeeID = SCOPE_IDENTITY();
+    SELECT 'Employee added successfully with ID: ' + CAST(@EmployeeID AS VARCHAR(10)) AS Message;
 END;
 
 GO
-CREATE PROCEDURE UpdateEmployeeInfo @EmployeeID INT,
-                                    @Email VARCHAR(100),
-                                    @Phone VARCHAR(20),
-                                    @Address VARCHAR(150) AS
+CREATE PROCEDURE UpdateEmployeeInfo
+    @EmployeeID INT,
+    @Email VARCHAR(100) = NULL,
+    @Phone VARCHAR(20) = NULL,
+    @Address VARCHAR(150) = NULL
+AS
 BEGIN
-    IF NOT EXISTS (SELECT 1 
-                   FROM Employee 
-                   WHERE employee_id = @EmployeeID)
+    SET NOCOUNT ON;
+
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
     BEGIN
         SELECT 'Employee not found' AS Message;
         RETURN;
     END
-        
-    IF @Email IS NOT NULL 
-       AND EXISTS (SELECT 1 
-                   FROM Employee 
-                   WHERE email = @Email AND
-                    employee_id != @EmployeeID)
+
+    IF @Email IS NOT NULL
+        AND EXISTS (SELECT 1 FROM Employee WHERE email = @Email AND employee_id != @EmployeeID)
     BEGIN
         SELECT 'Email already in use by another employee' AS Message;
         RETURN;
     END
-        
-    UPDATE
-        Employee
-    SET email   = @Email,
-        phone   = @Phone,
-        address = @Address
+
+    UPDATE Employee
+    SET
+        email = COALESCE(@Email, email),
+        phone = COALESCE(@Phone, phone),
+        address = COALESCE(@Address, address)
     WHERE employee_id = @EmployeeID;
 
     SELECT 'Employee information updated successfully' AS Message;
-
 END;
 
 GO
-CREATE PROCEDURE AssignRole @EmployeeID INT,
-                            @RoleID INT AS
+CREATE PROCEDURE AssignRole
+    @EmployeeID INT,
+    @RoleID INT
+AS
 BEGIN
-    IF NOT EXISTS (SELECT 1 
-                   FROM Employee 
-                   WHERE employee_id = @EmployeeID)
+    SET NOCOUNT ON;
+
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
     BEGIN
         SELECT 'Employee not found' AS Message;
         RETURN;
     END
-    
-    IF NOT EXISTS (SELECT 1 
-                   FROM Role 
-                       WHERE role_id = @RoleID)
+
+    IF NOT EXISTS (SELECT 1 FROM Role WHERE role_id = @RoleID)
     BEGIN
         SELECT 'Role not found' AS Message;
         RETURN;
-    END    
-    
-    IF NOT EXISTS (SELECT 1
-                   FROM Employee_Role
-                   WHERE employee_id = @EmployeeID
-                     AND role_id = @RoleID)
-        BEGIN
-            INSERT INTO Employee_Role (employee_id, role_id)
-            VALUES (@EmployeeID, @RoleID);
+    END
 
-            SELECT 'Role assigned successfully' AS Message;
-
-        END
-    ELSE
+    IF EXISTS (SELECT 1 FROM Employee_Role WHERE employee_id = @EmployeeID AND role_id = @RoleID)
+    BEGIN
         SELECT 'Role already assigned to this employee' AS Message;
+        RETURN;
+    END
 
+    INSERT INTO Employee_Role (employee_id, role_id, assigned_date)
+    VALUES (@EmployeeID, @RoleID, GETDATE());
+
+    SELECT 'Role assigned successfully' AS Message;
 END;
 
 GO
-CREATE PROCEDURE GetDepartmentEmployeeStats AS
+CREATE PROCEDURE GetDepartmentEmployeeStats
+AS
 BEGIN
-    SELECT d.department_name,
-           COUNT(e.employee_id) AS employee_count
-    FROM Department d
-             LEFT JOIN Employee e ON d.department_id = e.department_id
-    GROUP BY d.department_name;
+    SET NOCOUNT ON;
 
+    SELECT
+        d.department_name,
+        COUNT(e.employee_id) AS employee_count
+    FROM Department d
+    LEFT JOIN Employee e ON d.department_id = e.department_id AND e.is_active = 1
+    GROUP BY d.department_name;
 END;
 
 GO
@@ -267,27 +219,32 @@ CREATE PROCEDURE ReassignManager
     @NewManagerID INT 
 AS
 BEGIN
-    IF NOT EXISTS (SELECT 1  
-                   FROM Employee 
-                     WHERE employee_id = @EmployeeID)
+    SET NOCOUNT ON;
+
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
     BEGIN
         SELECT 'Employee not found' AS Message;
         RETURN;
     END
 
-    IF @NewManagerID IS NOT NULL 
-       AND NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @NewManagerID)
+    IF @NewManagerID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @NewManagerID)
     BEGIN
         SELECT 'Manager not found' AS Message;
         RETURN;
     END
-    
+
     IF @EmployeeID = @NewManagerID
     BEGIN
         SELECT 'Employee cannot be their own manager' AS Message;
         RETURN;
     END
-    
+
+    IF @NewManagerID IS NOT NULL AND EXISTS (SELECT 1 FROM Employee WHERE employee_id = @NewManagerID AND manager_id = @EmployeeID)
+    BEGIN
+        SELECT 'Cannot assign a direct report as manager' AS Message;
+        RETURN;
+    END
+
     UPDATE Employee
     SET manager_id = @NewManagerID
     WHERE employee_id = @EmployeeID;
@@ -1558,163 +1515,389 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE ConfigureLeaveEligibility @LeaveType VARCHAR(50),
-                                           @MinTenure INT,
-                                           @EmployeeType VARCHAR(50) AS
+CREATE PROCEDURE ConfigureLeaveEligibility
+    @LeaveType VARCHAR(50),
+    @MinTenure INT,
+    @EmployeeType VARCHAR(50)
+AS
 BEGIN
-    SELECT 'Leave eligibility configured for ' + @LeaveType AS Message;
+    SET NOCOUNT ON;
 
-END;
+    IF @LeaveType IS NULL OR @MinTenure IS NULL OR @EmployeeType IS NULL
+    BEGIN
+        SELECT 'Error: All parameters are required' AS Message;
+        RETURN;
+    END
 
-GO
-CREATE PROCEDURE ManageLeaveTypes @LeaveType VARCHAR(50),
-                                  @Description VARCHAR(200) AS
-BEGIN
-    IF NOT EXISTS (SELECT 1
-                   FROM Leave
-                   WHERE leave_type = @LeaveType)
-        BEGIN
-            INSERT INTO Leave (leave_type, leave_description)
-            VALUES (@LeaveType, @Description);
-
-            SELECT 'Leave type created successfully' AS Message;
-
-        END
-    ELSE
-        BEGIN
-            UPDATE
-                Leave
-            SET leave_description = @Description
-            WHERE leave_type = @LeaveType;
-
-            SELECT 'Leave type updated successfully' AS Message;
-
-        END
-END;
-
-GO
-CREATE PROCEDURE AssignLeaveEntitlement @EmployeeID INT,
-                                        @LeaveType VARCHAR(50),
-                                        @Entitlement DECIMAL(5, 2) AS
-BEGIN
-    BEGIN TRY
-        IF NOT EXISTS (SELECT 1
-                       FROM Employee
-                       WHERE employee_id = @EmployeeID)
-            BEGIN
-                SELECT 'Employee not found' AS Message;
-
-                RETURN;
-
-            END
-        IF @Entitlement < 0
-            BEGIN
-                SELECT 'Entitlement cannot be negative' AS Message;
-
-                RETURN;
-
-            END
-        DECLARE @LeaveID INT;
-
-        SELECT @LeaveID = leave_id
-        FROM Leave
-        WHERE leave_type = @LeaveType;
-
-        IF @LeaveID IS NULL
-            BEGIN
-                SELECT 'Leave type not found' AS Message;
-
-                RETURN;
-
-            END
-        BEGIN TRANSACTION;
-
-        IF EXISTS (SELECT 1
-                   FROM LeaveEntitlement
-                   WHERE employee_id = @EmployeeID
-                     AND leave_type_id = @LeaveID)
-            UPDATE
-                LeaveEntitlement
-            SET entitlement = @Entitlement
-            WHERE employee_id = @EmployeeID
-              AND leave_type_id = @LeaveID;
-
-        ELSE
-            INSERT INTO LeaveEntitlement (employee_id, leave_type_id, entitlement)
-            VALUES (@EmployeeID, @LeaveID, @Entitlement);
-
-        COMMIT TRANSACTION;
-
-        SELECT 'Leave entitlement assigned successfully' AS Message;
-
-    END TRY BEGIN CATCH
-        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
-
-        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
-
-    END CATCH
-END;
-
-GO
-CREATE PROCEDURE ConfigureLeaveRules @LeaveType VARCHAR(50),
-                                     @MaxDuration INT,
-                                     @NoticePeriod INT,
-                                     @WorkflowType VARCHAR(50) AS
-BEGIN
-    SELECT 'Leave rules configured for ' + @LeaveType AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE ConfigureSpecialLeave @LeaveType VARCHAR(50),
-                                       @Rules VARCHAR(200) AS
-BEGIN
-    SELECT 'Special leave configured: ' + @LeaveType AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE SetLeaveYearRules @StartDate DATE,
-                                   @EndDate DATE AS
-BEGIN
-    SELECT 'Leave year rules set from ' + CAST(@StartDate AS VARCHAR) + ' to ' + CAST(@EndDate AS VARCHAR) AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE AdjustLeaveBalance @EmployeeID INT,
-                                    @LeaveType VARCHAR(50),
-                                    @Adjustment DECIMAL(5, 2) AS
-BEGIN
     DECLARE @LeaveID INT;
+    SELECT @LeaveID = leave_id FROM Leave WHERE leave_type = @LeaveType;
 
+    IF @LeaveID IS NULL
+    BEGIN
+        SELECT 'Error: Leave type does not exist' AS Message;
+        RETURN;
+    END
+
+    DECLARE @EligibilityRules VARCHAR(MAX);
+    SET @EligibilityRules = 'MinTenure: ' + CAST(@MinTenure AS VARCHAR(10)) +
+                            ' months, EmployeeType: ' + @EmployeeType;
+
+    IF EXISTS (SELECT 1 FROM LeavePolicy WHERE leave_type_id = @LeaveID)
+    BEGIN
+        UPDATE LeavePolicy
+        SET
+            name = @LeaveType + ' Policy',
+            eligibility_rules = @EligibilityRules
+        WHERE leave_type_id = @LeaveID;
+    END
+    ELSE
+    BEGIN
+        INSERT INTO LeavePolicy (name, purpose, eligibility_rules, notice_period, reset_on_new_year, leave_type_id)
+        VALUES (@LeaveType + ' Policy', NULL, @EligibilityRules, NULL, 0, @LeaveID);
+    END
+
+    SELECT 'Leave eligibility configured for ' + @LeaveType AS Message;
+END;
+
+GO
+CREATE PROCEDURE ManageLeaveTypes
+    @LeaveType VARCHAR(50),
+    @Description VARCHAR(MAX)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF @LeaveType IS NULL
+    BEGIN
+        SELECT 'Error: LeaveType cannot be NULL' AS Message;
+        RETURN;
+    END
+
+    IF EXISTS (SELECT 1 FROM Leave WHERE leave_type = @LeaveType)
+    BEGIN
+        UPDATE Leave
+        SET leave_description = @Description
+        WHERE leave_type = @LeaveType;
+        SELECT 'Leave type updated successfully' AS Message;
+    END
+    ELSE
+    BEGIN
+        INSERT INTO Leave (leave_type, leave_description)
+        VALUES (@LeaveType, @Description);
+        SELECT 'Leave type created successfully' AS Message;
+    END
+END;
+
+GO
+CREATE PROCEDURE AssignLeaveEntitlement
+    @EmployeeID INT,
+    @LeaveType VARCHAR(50),
+    @Entitlement DECIMAL(5, 2)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF @EmployeeID IS NULL OR @LeaveType IS NULL OR @Entitlement IS NULL
+    BEGIN
+        SELECT 'Error: All parameters are required' AS Message;
+        RETURN;
+    END
+
+    IF @Entitlement < 0
+    BEGIN
+        SELECT 'Entitlement cannot be negative' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
+    BEGIN
+        SELECT 'Employee not found' AS Message;
+        RETURN;
+    END
+
+    DECLARE @LeaveID INT;
     SELECT @LeaveID = leave_id
     FROM Leave
     WHERE leave_type = @LeaveType;
 
-    IF @LeaveID IS NULL
-        BEGIN
-            SELECT 'Leave type not found' AS Message;
+    IF @@ROWCOUNT = 0
+    BEGIN
+        SELECT 'Leave type not found' AS Message;
+        RETURN;
+    END
 
-            RETURN;
+    IF @@ROWCOUNT > 1
+    BEGIN
+        SELECT 'Multiple leave types found with the same name. Leave type must be unique.' AS Message;
+        RETURN;
+    END
 
-        END
-    UPDATE
-        LeaveEntitlement
-    SET entitlement = entitlement + @Adjustment
-    WHERE employee_id = @EmployeeID
-      AND leave_type_id = @LeaveID;
+    IF EXISTS (SELECT 1 FROM LeaveEntitlement WHERE employee_id = @EmployeeID AND leave_type_id = @LeaveID)
+    BEGIN
+        UPDATE LeaveEntitlement
+        SET entitlement = @Entitlement
+        WHERE employee_id = @EmployeeID AND leave_type_id = @LeaveID;
+    END
+    ELSE
+    BEGIN
+        INSERT INTO LeaveEntitlement (employee_id, leave_type_id, entitlement)
+        VALUES (@EmployeeID, @LeaveID, @Entitlement);
+    END
 
-    SELECT 'Leave balance adjusted by ' + CAST(@Adjustment AS VARCHAR) + ' days' AS Message;
-
+    SELECT 'Leave entitlement assigned successfully' AS Message;
 END;
 
 GO
-CREATE PROCEDURE ManageLeaveRoles @RoleID INT,
-                                  @Permissions VARCHAR(200) AS
+CREATE PROCEDURE ConfigureLeaveRules
+    @LeaveType VARCHAR(50),
+    @MaxDuration INT,
+    @NoticePeriod INT,
+    @WorkflowType VARCHAR(50)
+AS
 BEGIN
-    SELECT 'Leave permissions updated for role' AS Message;
+    SET NOCOUNT ON;
 
+    IF @LeaveType IS NULL OR @MaxDuration IS NULL OR @NoticePeriod IS NULL OR @WorkflowType IS NULL
+    BEGIN
+        SELECT 'Error: All parameters are required' AS Message;
+        RETURN;
+    END
+
+    IF @MaxDuration <= 0
+    BEGIN
+        SELECT 'Error: Max duration must be greater than 0' AS Message;
+        RETURN;
+    END
+
+    IF @NoticePeriod < 0
+    BEGIN
+        SELECT 'Error: Notice period cannot be negative' AS Message;
+        RETURN;
+    END
+
+    DECLARE @LeaveID INT;
+    SELECT @LeaveID = leave_id
+    FROM Leave
+    WHERE leave_type = @LeaveType;
+
+    IF @@ROWCOUNT = 0
+    BEGIN
+        SELECT 'Error: Leave type not found' AS Message;
+        RETURN;
+    END
+
+    IF @@ROWCOUNT > 1
+    BEGIN
+        SELECT 'Error: Multiple leave types found. Leave type must be unique.' AS Message;
+        RETURN;
+    END
+
+    DECLARE @EligibilityRules VARCHAR(MAX);
+    SET @EligibilityRules = 'MaxDuration: ' + CAST(@MaxDuration AS VARCHAR(10)) +
+                            ' days, NoticePeriod: ' + CAST(@NoticePeriod AS VARCHAR(10)) +
+                            ' days, WorkflowType: ' + @WorkflowType;
+
+    IF EXISTS (SELECT 1 FROM LeavePolicy WHERE leave_type_id = @LeaveID)
+    BEGIN
+        UPDATE LeavePolicy
+        SET
+            name = @LeaveType + ' Policy',
+            eligibility_rules = @EligibilityRules,
+            notice_period = @NoticePeriod
+        WHERE leave_type_id = @LeaveID;
+    END
+    ELSE
+    BEGIN
+        INSERT INTO LeavePolicy (name, purpose, eligibility_rules, notice_period, reset_on_new_year, leave_type_id)
+        VALUES (@LeaveType + ' Policy', NULL, @EligibilityRules, @NoticePeriod, 0, @LeaveID);
+    END
+
+    SELECT 'Leave rules configured for ' + @LeaveType AS Message;
+END;
+
+GO
+CREATE PROCEDURE ConfigureSpecialLeave
+    @LeaveType VARCHAR(50),
+    @Rules VARCHAR(MAX)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF @LeaveType IS NULL OR @Rules IS NULL
+    BEGIN
+        SELECT 'Error: All parameters are required' AS Message;
+        RETURN;
+    END
+
+    DECLARE @LeaveID INT;
+    SELECT @LeaveID = leave_id
+    FROM Leave
+    WHERE leave_type = @LeaveType;
+
+    IF @@ROWCOUNT = 0
+    BEGIN
+        SELECT 'Error: Leave type not found' AS Message;
+        RETURN;
+    END
+
+    IF @@ROWCOUNT > 1
+    BEGIN
+        SELECT 'Error: Multiple leave types found. Leave type must be unique.' AS Message;
+        RETURN;
+    END
+
+    IF EXISTS (SELECT 1 FROM LeavePolicy WHERE leave_type_id = @LeaveID)
+    BEGIN
+        UPDATE LeavePolicy
+        SET
+            name = @LeaveType + ' Policy',
+            special_leave_type = @LeaveType,
+            eligibility_rules = @Rules
+        WHERE leave_type_id = @LeaveID;
+    END
+    ELSE
+    BEGIN
+        INSERT INTO LeavePolicy (name, purpose, eligibility_rules, notice_period, special_leave_type, reset_on_new_year, leave_type_id)
+        VALUES (@LeaveType + ' Policy', NULL, @Rules, NULL, @LeaveType, 0, @LeaveID);
+    END
+
+    SELECT 'Special leave configured: ' + @LeaveType AS Message;
+END;
+
+GO
+CREATE PROCEDURE SetLeaveYearRules
+    @StartDate DATE,
+    @EndDate DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF @StartDate IS NULL OR @EndDate IS NULL
+    BEGIN
+        SELECT 'Error: All parameters are required' AS Message;
+        RETURN;
+    END
+
+    IF @StartDate >= @EndDate
+    BEGIN
+        SELECT 'Error: Start date must be before end date' AS Message;
+        RETURN;
+    END
+
+    DECLARE @Rules VARCHAR(MAX);
+    SET @Rules = 'LeaveYearStart: ' + CONVERT(VARCHAR, @StartDate, 23) +
+                 ', LeaveYearEnd: ' + CONVERT(VARCHAR, @EndDate, 23);
+
+    IF EXISTS (SELECT 1 FROM LeavePolicy WHERE name = 'Global Leave Year')
+    BEGIN
+        UPDATE LeavePolicy
+        SET eligibility_rules = @Rules
+        WHERE name = 'Global Leave Year';
+    END
+    ELSE
+    BEGIN
+        INSERT INTO LeavePolicy (name, purpose, eligibility_rules, notice_period, special_leave_type, reset_on_new_year, leave_type_id)
+        VALUES ('Global Leave Year', 'System-defined leave year configuration', @Rules, NULL, NULL, 0, NULL);
+    END
+
+    SELECT 'Leave year rules set from ' + CONVERT(VARCHAR, @StartDate, 23) + ' to ' + CONVERT(VARCHAR, @EndDate, 23) AS Message;
+END;
+
+GO
+CREATE PROCEDURE AdjustLeaveBalance
+    @EmployeeID INT,
+    @LeaveType VARCHAR(50),
+    @Adjustment DECIMAL(5, 2)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF @EmployeeID IS NULL OR @LeaveType IS NULL OR @Adjustment IS NULL
+    BEGIN
+        SELECT 'Error: All parameters are required' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
+    BEGIN
+        SELECT 'Error: Employee not found' AS Message;
+        RETURN;
+    END
+
+    DECLARE @LeaveID INT;
+    SELECT @LeaveID = leave_id
+    FROM Leave
+    WHERE leave_type = @LeaveType;
+
+    IF @@ROWCOUNT = 0
+    BEGIN
+        SELECT 'Leave type not found' AS Message;
+        RETURN;
+    END
+
+    IF @@ROWCOUNT > 1
+    BEGIN
+        SELECT 'Error: Multiple leave types found. Leave type must be unique.' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM LeaveEntitlement WHERE employee_id = @EmployeeID AND leave_type_id = @LeaveID)
+    BEGIN
+        SELECT 'Error: Leave entitlement not found for this employee' AS Message;
+        RETURN;
+    END
+
+    DECLARE @NewBalance DECIMAL(5, 2);
+    SELECT @NewBalance = entitlement + @Adjustment
+    FROM LeaveEntitlement
+    WHERE employee_id = @EmployeeID AND leave_type_id = @LeaveID;
+
+    IF @NewBalance < 0
+    BEGIN
+        SELECT 'Error: Adjustment would result in negative leave balance' AS Message;
+        RETURN;
+    END
+
+    UPDATE LeaveEntitlement
+    SET entitlement = @NewBalance
+    WHERE employee_id = @EmployeeID AND leave_type_id = @LeaveID;
+
+    SELECT 'Leave balance adjusted by ' + CAST(@Adjustment AS VARCHAR(10)) + ' days' AS Message;
+END;
+
+GO
+CREATE PROCEDURE ManageLeaveRoles
+    @RoleID INT,
+    @Permissions VARCHAR(100)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    IF @RoleID IS NULL OR @Permissions IS NULL
+    BEGIN
+        SELECT 'Error: All parameters are required' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Role WHERE role_id = @RoleID)
+    BEGIN
+        SELECT 'Error: Role not found' AS Message;
+        RETURN;
+    END
+
+    IF EXISTS (SELECT 1 FROM RolePermission WHERE role_id = @RoleID AND permission_name = 'leave_actions')
+    BEGIN
+        UPDATE RolePermission
+        SET allowed_action = @Permissions
+        WHERE role_id = @RoleID AND permission_name = 'leave_actions';
+    END
+    ELSE
+    BEGIN
+        INSERT INTO RolePermission (role_id, permission_name, allowed_action)
+        VALUES (@RoleID, 'leave_actions', @Permissions);
+    END
+
+    SELECT 'Leave roles and permissions managed successfully' AS Message;
 END;
 
 GO
@@ -1741,6 +1924,25 @@ BEGIN
 
     SELECT 'Leave decision overridden: ' + @Reason AS Message;
 
+    IF NOT EXISTS (SELECT 1 FROM Role WHERE role_id = @RoleID)
+    BEGIN
+        SELECT 'Error: Role not found' AS Message;
+        RETURN;
+    END
+
+    IF EXISTS (SELECT 1 FROM RolePermission WHERE role_id = @RoleID AND permission_name = 'leave_actions')
+    BEGIN
+        UPDATE RolePermission
+        SET allowed_action = @Permissions
+        WHERE role_id = @RoleID AND permission_name = 'leave_actions';
+    END
+    ELSE
+    BEGIN
+        INSERT INTO RolePermission (role_id, permission_name, allowed_action)
+        VALUES (@RoleID, 'leave_actions', @Permissions);
+    END
+
+    SELECT 'Leave roles and permissions managed successfully' AS Message;
 END;
 
 GO
@@ -1759,6 +1961,7 @@ BEGIN
 
     SELECT 'Bulk leave requests processed' AS Message;
 
+    SELECT 'Leave balance adjusted by ' + CAST(@Adjustment AS VARCHAR(10)) + ' days' AS Message;
 END;
 
 GO
