@@ -1409,6 +1409,8 @@ CREATE PROCEDURE CreateShiftType
     @Status VARCHAR(50) = 'Active'
 AS
 BEGIN
+    SET NOCOUNT ON;
+
     IF @Type NOT IN ('Normal', 'Split', 'Overnight', 'Mission', 'Flexible', 'Weekend', 'Holiday')
     BEGIN
         SELECT 'Invalid shift type. Allowed: Normal, Split, Overnight, Mission, Flexible, Weekend, Holiday' AS Message;
@@ -1427,7 +1429,7 @@ BEGIN
         RETURN;
     END
 
-    INSERT INTO ShiftSchedule (name, type, start_time, end_time, break_duration, status)
+    INSERT INTO ShiftSchedule (name, TYPE, start_time, end_time, break_duration, STATUS)
     VALUES (@Name, @Type, @Start_Time, @End_Time, @Break_Duration, @Status);
 
     SELECT 'Shift type created successfully' AS Message;
@@ -1604,50 +1606,6 @@ BEGIN
         RETURN;
     END
 
-    IF NOT EXISTS (
-        SELECT 1
-        FROM LeaveRequest
-        WHERE status = 'Pending'
-          AND approval_timing < @Deadline
-    )
-    BEGIN
-        SELECT 'No pending leave requests meet escalation criteria' AS Message;
-        RETURN;
-    END
-
-    DECLARE @NotificationID INT;
-    INSERT INTO Notification (message_content, urgency, notification_type)
-    VALUES (
-        'Escalation: Pending leave requests older than ' + CONVERT(VARCHAR, @Deadline, 120) + ' require attention',
-        'High',
-        'Escalation'
-    );
-    SET @NotificationID = SCOPE_IDENTITY();
-
-    INSERT INTO Employee_Notification (employee_id, notification_id, delivery_status, delivered_at)
-    SELECT e.employee_id, @NotificationID, 'Pending', GETDATE()
-    FROM Employee e
-    INNER JOIN Employee_Role er ON e.employee_id = er.employee_id
-    INNER JOIN Role r ON er.role_id = r.role_id
-    WHERE r.role_name IN ('HR Administrator', 'System Administrator');
-
-    SELECT 'Pending requests escalated successfully' AS Message;
-END;
-
-GO
-CREATE PROCEDURE EscalatePendingRequests
-    @Deadline DATETIME
-AS
-BEGIN
-    SET NOCOUNT ON;
-
-    IF @Deadline IS NULL
-    BEGIN
-        SELECT 'Deadline is required' AS Message;
-        RETURN;
-    END
-
-    -- Since LeaveRequest has no submission_date, escalate ALL pending requests
     IF NOT EXISTS (SELECT 1 FROM LeaveRequest WHERE status = 'Pending')
     BEGIN
         SELECT 'No pending leave requests to escalate' AS Message;
@@ -1657,7 +1615,7 @@ BEGIN
     DECLARE @NotificationID INT;
     INSERT INTO Notification (message_content, urgency, notification_type)
     VALUES (
-        'Escalation: Pending leave requests require immediate attention (deadline: ' + CONVERT(VARCHAR, @Deadline, 120) + ')',
+        'Escalation: Pending leave requests require immediate attention (deadline: ' + CONVERT(VARCHAR, @Deadline, 23) + ')',
         'High',
         'Escalation'
     );
@@ -3253,6 +3211,8 @@ CREATE PROCEDURE ConfigureSigningBonusPolicy
     @EligibilityCriteria NVARCHAR(MAX)
 AS
 BEGIN
+    SET NOCOUNT ON;
+
     IF @BonusType IS NULL OR @Amount IS NULL OR @EligibilityCriteria IS NULL
     BEGIN
         SELECT 'One of the inputs is null' AS Message;
@@ -3265,41 +3225,8 @@ BEGIN
         RETURN;
     END
 
-    INSERT INTO PayrollPolicy (type, description, effective_date)
-    VALUES (
-        'Bonus',
-        @BonusType + ' bonus policy',
-        GETDATE()
-    );
-
-    SELECT 'Signing bonus policy configured: ' + @BonusType AS Message;
-END;
-
-GO
-CREATE PROCEDURE ConfigureSigningBonusPolicy
-    @BonusType VARCHAR(50),
-    @Amount DECIMAL(10, 2),
-    @EligibilityCriteria NVARCHAR(MAX)
-AS
-BEGIN
-    IF @BonusType IS NULL OR @Amount IS NULL OR @EligibilityCriteria IS NULL
-    BEGIN
-        SELECT 'One of the inputs is null' AS Message;
-        RETURN;
-    END
-
-    IF @Amount <= 0
-    BEGIN
-        SELECT 'Bonus amount must be greater than 0' AS Message;
-        RETURN;
-    END
-
-    INSERT INTO PayrollPolicy (type, description, effective_date)
-    VALUES (
-        'Bonus',
-        @BonusType + ' bonus policy',
-        GETDATE()
-    );
+    INSERT INTO PayrollPolicy (TYPE, description, effective_date)
+    VALUES ('Bonus', @BonusType + ' signing bonus policy', GETDATE());
 
     SELECT 'Signing bonus policy configured: ' + @BonusType AS Message;
 END;
