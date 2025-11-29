@@ -52,7 +52,7 @@ CREATE TABLE Department
 CREATE TABLE Currency
 (
     CurrencyCode VARCHAR(10) PRIMARY KEY,
-    CurrencyName VARCHAR(50)    NOT NULL,
+    CurrencyName VARCHAR(50)    NOT NULL UNIQUE,
     ExchangeRate DECIMAL(10, 4) NOT NULL,
     CreatedDate  DATETIME DEFAULT GETDATE(),
     LastUpdated  DATETIME DEFAULT GETDATE()
@@ -63,8 +63,8 @@ CREATE TABLE SalaryType
     salary_type_id    INT PRIMARY KEY IDENTITY (1, 1),
     TYPE              VARCHAR(50) NOT NULL,
     payment_frequency VARCHAR(50) NOT NULL,
-    currency          VARCHAR(10) NOT NULL,
-    FOREIGN KEY (currency) REFERENCES Currency (CurrencyCode)
+    currency          VARCHAR(50) NOT NULL,
+    FOREIGN KEY (currency) REFERENCES Currency (CurrencyName)
 );
 
 CREATE TABLE Insurance
@@ -81,9 +81,7 @@ CREATE TABLE Contract
     TYPE          VARCHAR(50) NOT NULL,
     start_date    DATE        NOT NULL,
     end_date      DATE        NULL,
-    current_state VARCHAR(50) NOT NULL,
-    insurance_id  INT         NULL,
-    FOREIGN KEY (insurance_id) REFERENCES Insurance (insurance_id)
+    current_state VARCHAR(50) NOT NULL
 );
 
 CREATE TABLE Employee
@@ -91,7 +89,7 @@ CREATE TABLE Employee
     employee_id             INT PRIMARY KEY IDENTITY (1, 1),
     first_name              VARCHAR(50)         NOT NULL,
     last_name               VARCHAR(50)         NOT NULL,
-    full_name               AS CONCAT(first_name, ' ', last_name) PERSISTED,
+    full_name               VARCHAR(200),
     national_id             VARCHAR(50) UNIQUE,
     date_of_birth           DATE,
     country_of_birth        VARCHAR(50),
@@ -409,10 +407,8 @@ CREATE TABLE ShiftAssignment
     start_date    DATE        NOT NULL,
     end_date      DATE        NULL,
     STATUS        VARCHAR(50) NOT NULL,
-    exception_id  INT         NULL,
     FOREIGN KEY (employee_id) REFERENCES Employee (employee_id),
-    FOREIGN KEY (shift_id) REFERENCES ShiftSchedule (shift_id),
-    FOREIGN KEY (exception_id) REFERENCES Exception (exception_id)
+    FOREIGN KEY (shift_id) REFERENCES ShiftSchedule (shift_id)
 );
 
 CREATE TABLE Employee_Exception
@@ -460,10 +456,8 @@ CREATE TABLE AttendanceCorrectionRequest
     reason          varchar(max) NOT NULL,
     STATUS          VARCHAR(50)  NOT NULL,
     recorded_by     INT          NOT NULL,
-    attendance_id   INT,
     FOREIGN KEY (employee_id) REFERENCES Employee (employee_id),
-    FOREIGN KEY (recorded_by) REFERENCES Employee (employee_id),
-    FOREIGN KEY (attendance_id) REFERENCES Attendance (attendance_id)
+    FOREIGN KEY (recorded_by) REFERENCES Employee (employee_id)
 );
 
 CREATE TABLE Device
@@ -554,12 +548,12 @@ CREATE TABLE AllowanceDeduction
     employee_id INT            NOT NULL,
     TYPE        VARCHAR(50)    NOT NULL,
     amount      DECIMAL(10, 2) NOT NULL,
-    currency    VARCHAR(10)    NOT NULL,
+    currency    VARCHAR(50)    NOT NULL,
     duration    VARCHAR(50),
     timezone    VARCHAR(50),
     FOREIGN KEY (payroll_id) REFERENCES Payroll (payroll_id),
     FOREIGN KEY (employee_id) REFERENCES Employee (employee_id),
-    FOREIGN KEY (currency) REFERENCES Currency (CurrencyCode)
+    FOREIGN KEY (currency) REFERENCES Currency (CurrencyName)
 );
 
 CREATE TABLE PayrollPolicy
