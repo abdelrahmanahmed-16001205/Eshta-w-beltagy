@@ -1,181 +1,172 @@
 USE HRMS;
 
 GO
-CREATE PROCEDURE ViewEmployeeInfo @EmployeeID INT AS
+CREATE PROCEDURE ViewEmployeeInfo
+    @EmployeeID INT
+AS
 BEGIN
-    SELECT *
+    SELECT
+        employee_id,
+        first_name,
+        last_name,
+        full_name,
+        national_id,
+        date_of_birth,
+        country_of_birth,
+        phone,
+        email,
+        address,
+        emergency_contact_name,
+        emergency_contact_phone,
+        relationship,
+        biography,
+        profile_image,
+        employment_progress,
+        account_status,
+        employment_status,
+        hire_date,
+        is_active,
+        profile_completion,
+        department_id,
+        position_id,
+        manager_id,
+        contract_id,
+        tax_form_id,
+        salary_type_id,
+        pay_grade
     FROM Employee
     WHERE employee_id = @EmployeeID;
-
 END;
 
 GO
-CREATE PROCEDURE AddEmployee @FullName VARCHAR(200),
-                             @NationalID VARCHAR(50),
-                             @DateOfBirth DATE,
-                             @CountryOfBirth VARCHAR(100),
-                             @Phone VARCHAR(50),
-                             @Email VARCHAR(100),
-                             @Address VARCHAR(255),
-                             @EmergencyContactName VARCHAR(100),
-                             @EmergencyContactPhone VARCHAR(50),
-                             @Relationship VARCHAR(50),
-                             @Biography VARCHAR(MAX),
-                             @EmploymentProgress VARCHAR(100),
-                             @AccountStatus VARCHAR(50),
-                             @EmploymentStatus VARCHAR(50),
-                             @HireDate DATE,
-                             @IsActive BIT,
-                             @ProfileCompletion INT,
-                             @DepartmentID INT,
-                             @PositionID INT,
-                             @ManagerID INT,
-                             @ContractID INT,
-                             @TaxFormID INT,
-                             @SalaryTypeID INT,
-                             @PayGrade VARCHAR(50),
-                             @EmployeeID INT OUTPUT AS
+CREATE PROCEDURE AddEmployee
+    @FullName               VARCHAR(200),
+    @NationalID             VARCHAR(50),
+    @DateOfBirth            DATE,
+    @CountryOfBirth         VARCHAR(50),      -- Fixed: table allows only 50 chars
+    @Phone                  VARCHAR(20),      -- Fixed: table uses VARCHAR(20)
+    @Email                  VARCHAR(100),
+    @Address                VARCHAR(150),     -- Fixed: table uses VARCHAR(150)
+    @EmergencyContactName   VARCHAR(100),
+    @EmergencyContactPhone  VARCHAR(20),      -- Fixed: table uses VARCHAR(20)
+    @Relationship           VARCHAR(50),
+    @Biography              VARCHAR(MAX),
+    @EmploymentProgress     VARCHAR(50),      -- Fixed: table uses VARCHAR(50)
+    @AccountStatus          VARCHAR(20),      -- Fixed: table uses VARCHAR(20)
+    @EmploymentStatus       VARCHAR(50),
+    @HireDate               DATE,
+    @IsActive               BIT,
+    @ProfileCompletion      INT,
+    @DepartmentID           INT,
+    @PositionID             INT,
+    @ManagerID              INT,
+    @ContractID             INT,
+    @TaxFormID              INT,
+    @SalaryTypeID           INT,
+    @PayGrade               INT,              -- ⚠️ CRITICAL FIX: Must be INT
+    @EmployeeID             INT OUTPUT
+AS
 BEGIN
-        IF @FullName IS NULL
-            OR @Email IS NULL
-            OR @HireDate IS NULL
-            BEGIN
-                SELECT 'Required fields cannot be null' AS Message;
+    SET NOCOUNT ON;
 
-                RETURN;
+    -- Required field checks
+    IF @FullName IS NULL OR @Email IS NULL OR @HireDate IS NULL
+    BEGIN
+        SELECT 'Required fields (FullName, Email, HireDate) cannot be null.' AS Message;
+        RETURN;
+    END
 
-            END
-        IF EXISTS (SELECT 1
-                   FROM Employee
-                   WHERE email = @Email)
-            BEGIN
-                SELECT 'Email already exists' AS Message;
+    -- Email uniqueness
+    IF EXISTS (SELECT 1 FROM Employee WHERE email = @Email)
+    BEGIN
+        SELECT 'Email already exists.' AS Message;
+        RETURN;
+    END
 
-                RETURN;
+    -- National ID uniqueness (if provided)
+    IF @NationalID IS NOT NULL AND EXISTS (SELECT 1 FROM Employee WHERE national_id = @NationalID)
+    BEGIN
+        SELECT 'National ID already exists.' AS Message;
+        RETURN;
+    END
 
-            END
-        IF @NationalID IS NOT NULL
-            AND EXISTS (SELECT 1
-                        FROM Employee
-                        WHERE national_id = @NationalID)
-            BEGIN
-                SELECT 'National ID already exists' AS Message;
+    -- Foreign key validations
+    IF NOT EXISTS (SELECT 1 FROM Department WHERE department_id = @DepartmentID)
+    BEGIN
+        SELECT 'Department not found.' AS Message;
+        RETURN;
+    END
 
-                RETURN;
+    IF NOT EXISTS (SELECT 1 FROM Position WHERE position_id = @PositionID)
+    BEGIN
+        SELECT 'Position not found.' AS Message;
+        RETURN;
+    END
 
-            END
-        IF NOT EXISTS (SELECT 1
-                       FROM Department
-                       WHERE department_id = @DepartmentID)
-            BEGIN
-                SELECT 'Department not found' AS Message;
+    IF @ManagerID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @ManagerID)
+    BEGIN
+        SELECT 'Manager not found.' AS Message;
+        RETURN;
+    END
 
-                RETURN;
+    IF @ContractID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Contract WHERE contract_id = @ContractID)
+    BEGIN
+        SELECT 'Contract not found.' AS Message;
+        RETURN;
+    END
 
-            END
-        IF NOT EXISTS (SELECT 1
-                       FROM Position
-                       WHERE position_id = @PositionID)
-            BEGIN
-                SELECT 'Position not found' AS Message;
+    IF @TaxFormID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM TaxForm WHERE tax_form_id = @TaxFormID)
+    BEGIN
+        SELECT 'Tax form not found.' AS Message;
+        RETURN;
+    END
 
-                RETURN;
+    IF @SalaryTypeID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM SalaryType WHERE salary_type_id = @SalaryTypeID)
+    BEGIN
+        SELECT 'Salary type not found.' AS Message;
+        RETURN;
+    END
 
-            END
-        IF @ManagerID IS NOT NULL
-            AND NOT EXISTS (SELECT 1
-                            FROM Employee
-                            WHERE employee_id = @ManagerID)
-            BEGIN
-                SELECT 'Manager not found' AS Message;
+    IF @PayGrade IS NOT NULL AND NOT EXISTS (SELECT 1 FROM PayGrade WHERE pay_grade_id = @PayGrade)
+    BEGIN
+        SELECT 'Pay grade not found.' AS Message;
+        RETURN;
+    END
 
-                RETURN;
+    -- Split full name into first and last (basic logic)
+    DECLARE @FirstName VARCHAR(50), @LastName VARCHAR(50);
+    IF CHARINDEX(' ', @FullName) > 0
+    BEGIN
+        SET @FirstName = LEFT(@FullName, CHARINDEX(' ', @FullName) - 1);
+        SET @LastName = LTRIM(RIGHT(@FullName, LEN(@FullName) - CHARINDEX(' ', @FullName)));
+    END
+    ELSE
+    BEGIN
+        SET @FirstName = @FullName;
+        SET @LastName = '';
+    END
 
-            END
-        DECLARE @FirstName VARCHAR(50),
-            @LastName VARCHAR(50);
+    -- Insert employee
+    INSERT INTO Employee (
+        first_name, last_name, full_name, national_id, date_of_birth,
+        country_of_birth, phone, email, address, emergency_contact_name,
+        emergency_contact_phone, relationship, biography, employment_progress,
+        account_status, employment_status, hire_date, is_active, profile_completion,
+        department_id, position_id, manager_id, contract_id, tax_form_id,
+        salary_type_id, pay_grade
+    )
+    VALUES (
+        @FirstName, @LastName, @FullName, @NationalID, @DateOfBirth,
+        @CountryOfBirth, @Phone, @Email, @Address, @EmergencyContactName,
+        @EmergencyContactPhone, @Relationship, @Biography, @EmploymentProgress,
+        @AccountStatus, @EmploymentStatus, @HireDate, @IsActive, @ProfileCompletion,
+        @DepartmentID, @PositionID, @ManagerID, @ContractID, @TaxFormID,
+        @SalaryTypeID, @PayGrade
+    );
 
-        IF CHARINDEX(' ', @FullName) > 0
-            BEGIN
-                SET
-                    @FirstName = LEFT(@FullName, CHARINDEX(' ', @FullName) - 1);
+    SET @EmployeeID = SCOPE_IDENTITY();
 
-                SET
-                    @LastName = RIGHT(
-                            @FullName,
-                            DATALENGTH(@FullName) - CHARINDEX(' ', @FullName)
-                                );
-
-            END
-        ELSE
-            BEGIN
-                SET
-                    @FirstName = @FullName;
-
-                SET
-                    @LastName = '';
-
-            END
-
-        INSERT INTO Employee (first_name,
-                              last_name,
-                              full_name,
-                              national_id,
-                              date_of_birth,
-                              country_of_birth,
-                              phone,
-                              email,
-                              address,
-                              emergency_contact_name,
-                              emergency_contact_phone,
-                              relationship,
-                              biography,
-                              employment_progress,
-                              account_status,
-                              employment_status,
-                              hire_date,
-                              is_active,
-                              profile_completion,
-                              department_id,
-                              position_id,
-                              manager_id,
-                              contract_id,
-                              tax_form_id,
-                              salary_type_id,
-                              pay_grade)
-        VALUES (@FirstName,
-                @LastName,
-                @FullName,
-                @NationalID,
-                @DateOfBirth,
-                @CountryOfBirth,
-                @Phone,
-                @Email,
-                @Address,
-                @EmergencyContactName,
-                @EmergencyContactPhone,
-                @Relationship,
-                @Biography,
-                @EmploymentProgress,
-                @AccountStatus,
-                @EmploymentStatus,
-                @HireDate,
-                @IsActive,
-                @ProfileCompletion,
-                @DepartmentID,
-                @PositionID,
-                @ManagerID,
-                @ContractID,
-                @TaxFormID,
-                @SalaryTypeID,
-                @PayGrade);
-
-        SET
-            @EmployeeID = SCOPE_IDENTITY();
-
-
-        SELECT 'Employee added successfully with ID: ' + CAST(@EmployeeID AS VARCHAR(10)) AS Message;
-
+    SELECT 'Employee added successfully with ID: ' + CAST(@EmployeeID AS VARCHAR(10)) AS Message;
 END;
 
 GO
@@ -1461,12 +1452,48 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE ConfigureLeaveEligibility @LeaveType VARCHAR(50),
-                                           @MinTenure INT,
-                                           @EmployeeType VARCHAR(50) AS
+CREATE PROCEDURE ConfigureLeaveEligibility
+    @LeaveType VARCHAR(50),
+    @MinTenure INT,
+    @EmployeeType VARCHAR(50)
+AS
 BEGIN
-    SELECT 'Leave eligibility configured for ' + @LeaveType AS Message;
+    SET NOCOUNT ON;
 
+    IF @LeaveType IS NULL OR @MinTenure IS NULL OR @EmployeeType IS NULL
+    BEGIN
+        SELECT 'Error: All parameters are required' AS Message;
+        RETURN;
+    END
+
+    DECLARE @LeaveID INT;
+    SELECT @LeaveID = leave_id FROM Leave WHERE leave_type = @LeaveType;
+
+    IF @LeaveID IS NULL
+    BEGIN
+        SELECT 'Error: Leave type does not exist' AS Message;
+        RETURN;
+    END
+
+    DECLARE @EligibilityRules VARCHAR(MAX);
+    SET @EligibilityRules = 'MinTenure: ' + CAST(@MinTenure AS VARCHAR(10)) +
+                            ' months, EmployeeType: ' + @EmployeeType;
+
+    IF EXISTS (SELECT 1 FROM LeavePolicy WHERE leave_type_id = @LeaveID)
+    BEGIN
+        UPDATE LeavePolicy
+        SET
+            name = @LeaveType + ' Policy',
+            eligibility_rules = @EligibilityRules
+        WHERE leave_type_id = @LeaveID;
+    END
+    ELSE
+    BEGIN
+        INSERT INTO LeavePolicy (name, purpose, eligibility_rules, notice_period, reset_on_new_year, leave_type_id)
+        VALUES (@LeaveType + ' Policy', NULL, @EligibilityRules, NULL, 0, @LeaveID);
+    END
+
+    SELECT 'Leave eligibility configured for ' + @LeaveType AS Message;
 END;
 
 GO
