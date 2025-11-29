@@ -3505,150 +3505,108 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE RejectLeaveRequest @LeaveRequestID INT,
-                                    @ManagerID INT,
-                                    @Reason VARCHAR(200) AS
+CREATE PROCEDURE RejectLeaveRequest
+    @LeaveRequestID INT,
+    @ManagerID INT,
+    @Reason VARCHAR(200)
+AS
 BEGIN
-    UPDATE
-        LeaveRequest
-    SET STATUS          = 'Rejected',
+    UPDATE LeaveRequest
+    SET status = 'Rejected',
         approval_timing = GETDATE()
     WHERE request_id = @LeaveRequestID;
 
     DECLARE @EmployeeID INT;
-
     SELECT @EmployeeID = employee_id
     FROM LeaveRequest
     WHERE request_id = @LeaveRequestID;
 
     INSERT INTO Notification (message_content, urgency, notification_type)
-    VALUES ('Your leave request was rejected: ' + @Reason,
-            'Normal',
-            'Leave');
-
-    INSERT INTO Employee_Notification (employee_id,
-                                       notification_id,
-                                       delivery_status,
-                                       delivered_at)
-    VALUES (@EmployeeID,
-            SCOPE_IDENTITY(),
-            'Delivered',
-            GETDATE());
-
-    SELECT 'Leave request rejected: ' + @Reason AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE DelegateLeaveApproval @ManagerID INT,
-                                       @DelegateID INT,
-                                       @StartDate DATE,
-                                       @EndDate DATE AS
-BEGIN
-    SELECT 'Leave approval delegated from ' + CAST(@ManagerID AS VARCHAR) + ' to ' + CAST(@DelegateID AS VARCHAR) +
-           ' for period ' + CAST(@StartDate AS VARCHAR) + ' to ' + CAST(@EndDate AS VARCHAR) AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE FlagIrregularLeave @EmployeeID INT,
-                                    @ManagerID INT,
-                                    @PatternDescription VARCHAR(200) AS
-BEGIN
-    SELECT 'Irregular leave pattern flagged for employee ' + CAST(@EmployeeID AS VARCHAR) + ': ' +
-           @PatternDescription AS Message;
-
-END;
-
-GO
-CREATE PROCEDURE NotifyNewLeaveRequest @ManagerID INT,
-                                       @RequestID INT AS
-BEGIN
-    INSERT INTO Notification (message_content, urgency, notification_type)
-    VALUES ('New leave request #' + CAST(@RequestID AS VARCHAR) + ' requires your approval',
-            'Normal',
-            'Leave');
+    VALUES ('Your leave request was rejected: ' + @Reason, 'Normal', 'Leave');
 
     DECLARE @NotificationID INT = SCOPE_IDENTITY();
+    INSERT INTO Employee_Notification (employee_id, notification_id, delivery_status, delivered_at)
+    VALUES (@EmployeeID, @NotificationID, 'Delivered', GETDATE());
 
-    INSERT INTO Employee_Notification (employee_id,
-                                       notification_id,
-                                       delivery_status,
-                                       delivered_at)
-    VALUES (@ManagerID,
-            @NotificationID,
-            'Delivered',
-            GETDATE());
-
-    SELECT 'Manager notified of new leave request' AS Message;
-
+    SELECT 'Leave request rejected: ' + @Reason AS Message;
 END;
 
 GO
-CREATE PROCEDURE SubmitLeaveRequest @EmployeeID INT,
-                                    @LeaveTypeID INT,
-                                    @StartDate DATE,
-                                    @EndDate DATE,
-                                    @Reason VARCHAR(100)
+CREATE PROCEDURE DelegateLeaveApproval
+    @ManagerID INT,
+    @DelegateID INT,
+    @StartDate DATE,
+    @EndDate DATE
 AS
 BEGIN
-    BEGIN TRY
-        IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
-            BEGIN
-                SELECT 'Employee not found' AS Message;
-                RETURN;
-            END
+    INSERT INTO LeaveApprovalDelegation (manager_id, delegate_id, start_date, end_date, status)
+    VALUES (@ManagerID, @DelegateID, @StartDate, @EndDate, 'Active');
 
-        IF NOT EXISTS (SELECT 1 FROM Leave WHERE leave_id = @LeaveTypeID)
-            BEGIN
-                SELECT 'Leave type not found' AS Message;
-                RETURN;
-            END
+    SELECT 'Leave approval delegated from ' + CAST(@ManagerID AS VARCHAR) + ' to ' + CAST(@DelegateID AS VARCHAR) +
+           ' for period ' + CAST(@StartDate AS VARCHAR) + ' to ' + CAST(@EndDate AS VARCHAR) AS Message;
+END;
 
-        IF @StartDate > @EndDate
-            BEGIN
-                SELECT 'Start date cannot be after end date' AS Message;
-                RETURN;
-            END
+GO
+CREATE PROCEDURE FlagIrregularLeave
+    @EmployeeID INT,
+    @ManagerID INT,
+    @PatternDescription VARCHAR(200)
+AS
+BEGIN
+    INSERT INTO IrregularLeaveFlag (employee_id, manager_id, description, flagged_at)
+    VALUES (@EmployeeID, @ManagerID, @PatternDescription, GETDATE());
 
-        DECLARE @Duration INT = DATEDIFF(DAY, @StartDate, @EndDate) + 1;
-        DECLARE @AvailableBalance DECIMAL(5, 2);
+    SELECT 'Irregular leave pattern flagged for employee ' + CAST(@EmployeeID AS VARCHAR) + ': ' +
+           @PatternDescription AS Message;
+END;
 
-        SELECT @AvailableBalance = entitlement
-        FROM LeaveEntitlement
-        WHERE employee_id = @EmployeeID
-          AND leave_type_id = @LeaveTypeID;
+GO
+CREATE PROCEDURE NotifyNewLeaveRequest
+    @ManagerID INT,
+    @RequestID INT
+AS
+BEGIN
+    INSERT INTO Notification (message_content, urgency, notification_type)
+    VALUES ('New leave request #' + CAST(@RequestID AS VARCHAR) + ' requires your approval', 'Normal', 'Leave');
 
-        IF @AvailableBalance IS NULL
-            BEGIN
-                SELECT 'No leave entitlement found for this leave type' AS Message;
-                RETURN;
-            END
+    DECLARE @NotificationID INT = SCOPE_IDENTITY();
+    INSERT INTO Employee_Notification (employee_id, notification_id, delivery_status, delivered_at)
+    VALUES (@ManagerID, @NotificationID, 'Delivered', GETDATE());
 
-        IF @AvailableBalance < @Duration
-            BEGIN
-                SELECT
-                    'Insufficient leave balance. Available: ' + CAST(@AvailableBalance AS VARCHAR) + ' days' AS Message;
-                RETURN;
-            END
+    SELECT 'Manager notified of new leave request' AS Message;
+END;
 
-        -- Note: Overlap validation removed as LeaveRequest table doesn't store start_date/end_date
-        -- Only duration is stored, making overlap detection impossible with current schema
+GO
+CREATE PROCEDURE SubmitLeaveRequest
+    @EmployeeID INT,
+    @LeaveTypeID INT,
+    @StartDate DATE,
+    @EndDate DATE,
+    @Reason VARCHAR(100)
+AS
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
+    BEGIN
+        SELECT 'Employee not found' AS Message;
+        RETURN;
+    END
 
-        BEGIN TRANSACTION;
+    IF NOT EXISTS (SELECT 1 FROM Leave WHERE leave_id = @LeaveTypeID)
+    BEGIN
+        SELECT 'Leave type not found' AS Message;
+        RETURN;
+    END
 
-        INSERT INTO LeaveRequest (employee_id, leave_id, justification, duration, STATUS)
-        VALUES (@EmployeeID, @LeaveTypeID, @Reason, @Duration, 'Pending');
+    IF @StartDate > @EndDate
+    BEGIN
+        SELECT 'Start date cannot be after end date' AS Message;
+        RETURN;
+    END
 
-        COMMIT TRANSACTION;
+    INSERT INTO LeaveRequest (employee_id, leave_id, justification, status)
+    VALUES (@EmployeeID, @LeaveTypeID, @Reason, 'Pending');
 
-        SELECT 'Leave request submitted successfully' AS Message;
-
-    END TRY
-    BEGIN CATCH
-        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
-        SELECT 'Error: ' + ERROR_MESSAGE() AS Message;
-    END CATCH
+    SELECT 'Leave request submitted successfully' AS Message;
 END;
 
 GO
@@ -4207,3 +4165,4 @@ BEGIN
     SELECT 'Leave status notification sent' AS Message;
 
 END;
+
