@@ -1279,6 +1279,22 @@ GO
 CREATE PROCEDURE DefinePenaltyThreshold @LateMinutes INT,
                                         @DeductionType VARCHAR(50) AS
 BEGIN
+    IF @LateMinutes IS NULL OR @DeductionType IS NULL
+    BEGIN
+        PRINT 'One of the inputs is null'
+        RETURN
+    END
+    
+    IF @LateMinutes <= 0
+    BEGIN
+        SELECT 'Late minutes must be greater than zero' AS Message;
+        RETURN;
+    END
+        IF @DeductionType NOT IN ('half-day', 'full-day', 'hourly', 'warning')
+    BEGIN
+        PRINT 'Invalid deduction type. Allowed: half-day, full-day, hourly, warning'
+        RETURN
+    END
     SELECT 'Penalty threshold defined: ' + CAST(@LateMinutes AS VARCHAR) + ' minutes = ' + @DeductionType AS Message;
 
 END;
@@ -1287,9 +1303,28 @@ GO
 CREATE PROCEDURE DefinePermissionLimits @MinHours INT,
                                         @MaxHours INT AS
 BEGIN
+   IF @MinHours IS NULL OR @MaxHours IS NULL
+    BEGIN
+        PRINT 'One of the inputs is null'
+        RETURN
+    END
+    
+    IF @MinHours < 0 OR @MaxHours < 0
+    BEGIN
+        PRINT 'Hours cannot be negative'
+        RETURN
+    END
+    
+    IF @MinHours > @MaxHours
+    BEGIN
+        PRINT 'Minimum hours cannot exceed maximum hours'
+        RETURN
+    END
+    
     SELECT
         'Permission limits set: Min=' + CAST(@MinHours AS VARCHAR) + ', Max=' + CAST(@MaxHours AS VARCHAR) AS Message;
-
+Select
+        'Permission limits set successfully' AS Message;
 END;
 
 GO
@@ -1303,7 +1338,62 @@ GO
 CREATE PROCEDURE LinkVacationToShift @VacationPackageID INT,
                                      @EmployeeID INT AS
 BEGIN
-    SELECT 'Vacation package linked to employee shift' AS Message;
+    IF @VacationPackageID IS NULL OR @EmployeeID IS NULL
+    BEGIN
+        PRINT 'One of the inputs is null'
+        RETURN
+    END
+    
+    -- Validate employee exists (Lab 7-1a EXISTS pattern)
+    IF NOT EXISTS (
+        SELECT 1 
+        FROM Employee 
+        WHERE employee_id = @EmployeeID
+    )
+    BEGIN
+        PRINT 'Employee ID does not exist'
+        RETURN
+    END
+    
+    -- Validate vacation leave exists (Lab 7-1a pattern)
+    IF NOT EXISTS (
+        SELECT 1 
+        FROM VacationLeave 
+        WHERE leave_id = @VacationPackageID
+    )
+    BEGIN
+        PRINT 'Vacation package ID does not exist'
+        RETURN
+    END
+    
+    -- Check if employee already has active shift assignments (Lab 7-1a)
+    IF EXISTS (
+        SELECT 1 
+        FROM ShiftAssignment 
+        WHERE employee_id = @EmployeeID 
+          AND status = 'Active'
+    )
+    BEGIN
+        -- Link vacation to employee's shift by creating leave request
+        INSERT INTO LeaveRequest (employee_id, leave_id, justification, duration, status)
+        VALUES (
+            @EmployeeID,
+            @VacationPackageID,
+            'Vacation package linked to shift schedule',
+            5,
+            'Approved'
+        )
+        
+        PRINT 'Vacation package linked to employee shift successfully'
+    END
+    ELSE
+    BEGIN
+        PRINT 'Employee has no active shift assignment'
+        RETURN
+    END
+    
+    SELECT 'Vacation package linked to employee shift' AS Message
+END
 
 END;
 
@@ -1318,7 +1408,27 @@ GO
 CREATE PROCEDURE AuthenticateLeaveAdmin @AdminID INT,
                                         @Password VARCHAR(100) AS
 BEGIN
-    SELECT 'Administrator authenticated successfully' AS Message;
+    IF @AdminID IS NULL OR @Password IS NULL
+    BEGIN
+        PRINT 'One of the inputs is null'
+        RETURN
+    END
+     IF EXISTS (
+        SELECT 1 
+        FROM HRAdministrator hr
+        INNER JOIN Employee e ON hr.employee_id = e.employee_id
+        WHERE hr.employee_id = @AdminID 
+          AND e.account_status = 'Active'
+    )
+DECLARE @ApprovalLevel VARCHAR(50)
+        SELECT @ApprovalLevel = approval_level
+        FROM HRAdministrator
+        WHERE employee_id = @AdminID
+        
+        IF @ApprovalLevel IN ('Senior', 'Manager', 'Director')
+        BEGIN
+            SELECT 'Administrator authenticated successfully' AS Message
+        END
 
 END;
 
@@ -1332,6 +1442,20 @@ END;
 GO
 CREATE PROCEDURE UpdateLeaveEntitlements @EmployeeID INT AS
 BEGIN
+     IF @EmployeeID IS NULL
+    BEGIN
+        PRINT 'Employee ID is required'
+        RETURN
+    END
+    F NOT EXISTS (
+        SELECT 1 
+        FROM Employee 
+        WHERE employee_id = @EmployeeID
+    )
+    BEGIN
+        PRINT 'Employee ID does not exist'
+        RETURN
+    END
     SELECT 'Leave entitlements updated for employee' AS Message;
 
 END;
@@ -3446,4 +3570,5 @@ END;
 
 
 GO
+
 
