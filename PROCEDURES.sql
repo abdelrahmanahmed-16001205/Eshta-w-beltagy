@@ -2754,55 +2754,145 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE ConfigureSigningBonusPolicy @BonusType VARCHAR(50),
-                                             @Amount DECIMAL(10, 2),
-                                             @EligibilityCriteria NVARCHAR(MAX) AS
+CREATE PROCEDURE ConfigureSigningBonusPolicy
+    @BonusType VARCHAR(50),
+    @Amount DECIMAL(10, 2),
+    @EligibilityCriteria NVARCHAR(MAX)
+AS
 BEGIN
+    IF @BonusType IS NULL OR @Amount IS NULL OR @EligibilityCriteria IS NULL
+    BEGIN
+        SELECT 'One of the inputs is null' AS Message;
+        RETURN;
+    END
+
+    IF @Amount <= 0
+    BEGIN
+        SELECT 'Bonus amount must be greater than 0' AS Message;
+        RETURN;
+    END
+
+    INSERT INTO PayrollPolicy (type, description, effective_date)
+    VALUES (
+        'Bonus',
+        @BonusType + ' bonus policy',
+        GETDATE()
+    );
+
     SELECT 'Signing bonus policy configured: ' + @BonusType AS Message;
-
 END;
 
 GO
-CREATE PROCEDURE GenerateTaxStatement @EmployeeID INT,
-                                      @TaxYear INT AS
+CREATE PROCEDURE ConfigureSigningBonusPolicy
+    @BonusType VARCHAR(50),
+    @Amount DECIMAL(10, 2),
+    @EligibilityCriteria NVARCHAR(MAX)
+AS
 BEGIN
-    SELECT e.employee_id,
-           e.full_name,
-           @TaxYear           AS tax_year,
-           SUM(p.base_amount) AS total_gross,
-           SUM(p.taxes)       AS total_taxes,
-           SUM(p.net_salary)  AS total_net
-    FROM Payroll p
-             INNER JOIN Employee e ON p.employee_id = e.employee_id
-    WHERE e.employee_id = @EmployeeID
-      AND YEAR(p.period_start) = @TaxYear
-    GROUP BY e.employee_id,
-             e.full_name;
+    IF @BonusType IS NULL OR @Amount IS NULL OR @EligibilityCriteria IS NULL
+    BEGIN
+        SELECT 'One of the inputs is null' AS Message;
+        RETURN;
+    END
 
+    IF @Amount <= 0
+    BEGIN
+        SELECT 'Bonus amount must be greater than 0' AS Message;
+        RETURN;
+    END
+
+    INSERT INTO PayrollPolicy (type, description, effective_date)
+    VALUES (
+        'Bonus',
+        @BonusType + ' bonus policy',
+        GETDATE()
+    );
+
+    SELECT 'Signing bonus policy configured: ' + @BonusType AS Message;
 END;
 
 GO
-CREATE PROCEDURE ApprovePayrollConfiguration @ConfigID INT,
-                                             @ApprovedBy INT AS
+CREATE PROCEDURE ApprovePayrollConfiguration
+    @ConfigID INT,
+    @ApprovedBy INT
+AS
 BEGIN
-    SELECT 'Payroll configuration approved by ' + CAST(@ApprovedBy AS VARCHAR) AS Message;
+    IF @ConfigID IS NULL OR @ApprovedBy IS NULL
+    BEGIN
+        SELECT 'One of the inputs is null' AS Message;
+        RETURN;
+    END
 
+    IF NOT EXISTS (SELECT 1 FROM PayrollPolicy WHERE policy_id = @ConfigID)
+    BEGIN
+        SELECT 'Configuration ID does not exist' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM HRAdministrator WHERE employee_id = @ApprovedBy)
+    BEGIN
+        SELECT 'Approver is not an HR Administrator' AS Message;
+        RETURN;
+    END
+
+    UPDATE PayrollPolicy
+    SET status = 'Approved', approved_by = @ApprovedBy, approved_at = GETDATE()
+    WHERE policy_id = @ConfigID;
+
+    SELECT 'Payroll configuration approved successfully' AS Message;
 END;
 
 GO
-CREATE PROCEDURE ModifyPastPayroll @PayrollRunID INT,
-                                   @EmployeeID INT,
-                                   @FieldName VARCHAR(50),
-                                   @NewValue DECIMAL(10, 2),
-                                   @ModifiedBy INT AS
+CREATE PROCEDURE ModifyPastPayroll
+    @PayrollRunID INT,
+    @EmployeeID INT,
+    @FieldName VARCHAR(50),
+    @NewValue DECIMAL(10, 2),
+    @ModifiedBy INT
+AS
 BEGIN
-    INSERT INTO Payroll_Log (payroll_id, actor, modification_type)
-    VALUES (@PayrollRunID,
-            @ModifiedBy,
-            'Modified ' + @FieldName + ' to ' + CAST(@NewValue AS VARCHAR));
+    IF @PayrollRunID IS NULL OR @EmployeeID IS NULL OR @FieldName IS NULL OR 
+       @NewValue IS NULL OR @ModifiedBy IS NULL
+    BEGIN
+        SELECT 'One of the inputs is null' AS Message;
+        RETURN;
+    END
 
-    SELECT 'Past payroll modified and logged' AS Message;
+    IF NOT EXISTS (SELECT 1 FROM Payroll WHERE payroll_id = @PayrollRunID AND employee_id = @EmployeeID)
+    BEGIN
+        SELECT 'Payroll record not found' AS Message;
+        RETURN;
+    END
 
+    IF NOT EXISTS (SELECT 1 FROM HRAdministrator WHERE employee_id = @ModifiedBy)
+    BEGIN
+        SELECT 'Modifier is not authorized' AS Message;
+        RETURN;
+    END
+
+    IF @FieldName = 'net_salary'
+    BEGIN
+        UPDATE Payroll
+        SET net_salary = @NewValue,
+            modified_by = @ModifiedBy,
+            modified_at = GETDATE()
+        WHERE payroll_id = @PayrollRunID;
+    END
+    ELSE IF @FieldName = 'gross_salary'
+    BEGIN
+        UPDATE Payroll
+        SET gross_salary = @NewValue,
+            modified_by = @ModifiedBy,
+            modified_at = GETDATE()
+        WHERE payroll_id = @PayrollRunID;
+    END
+    ELSE
+    BEGIN
+        SELECT 'Field not modifiable' AS Message;
+        RETURN;
+    END
+
+    SELECT 'Payroll entry modified successfully' AS Message;
 END;
 
 GO
@@ -4004,6 +4094,7 @@ END;
 
 
 GO
+
 
 
 
