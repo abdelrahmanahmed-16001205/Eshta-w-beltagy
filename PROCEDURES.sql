@@ -253,63 +253,59 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE ReassignHierarchy @EmployeeID INT,
-                                   @NewDepartmentID INT,
-                                   @NewManagerID INT AS
+CREATE PROCEDURE ReassignHierarchy
+    @EmployeeID INT,
+    @NewDepartmentID INT,
+    @NewManagerID INT
+AS
 BEGIN
+    SET NOCOUNT ON;
 
-        IF NOT EXISTS (SELECT 1
-                       FROM Employee
-                       WHERE employee_id = @EmployeeID)
-            BEGIN
-                SELECT 'Employee not found' AS Message;
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
+    BEGIN
+        SELECT 'Employee not found' AS Message;
+        RETURN;
+    END
 
-                RETURN;
+    IF NOT EXISTS (SELECT 1 FROM Department WHERE department_id = @NewDepartmentID)
+    BEGIN
+        SELECT 'Department not found' AS Message;
+        RETURN;
+    END
 
-            END
-        IF NOT EXISTS (SELECT 1
-                       FROM Department
-                       WHERE department_id = @NewDepartmentID)
-            BEGIN
-                SELECT 'Department not found' AS Message;
+    IF @NewManagerID IS NOT NULL AND NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @NewManagerID)
+    BEGIN
+        SELECT 'Manager not found' AS Message;
+        RETURN;
+    END
 
-                RETURN;
+    IF @EmployeeID = @NewManagerID
+    BEGIN
+        SELECT 'Employee cannot be their own manager' AS Message;
+        RETURN;
+    END
 
-            END
-        IF @NewManagerID IS NOT NULL
-            AND NOT EXISTS (SELECT 1
-                            FROM Employee
-                            WHERE employee_id = @NewManagerID)
-            BEGIN
-                SELECT 'Manager not found' AS Message;
+    IF @NewManagerID IS NOT NULL AND EXISTS (SELECT 1 FROM Employee WHERE employee_id = @NewManagerID AND manager_id = @EmployeeID)
+    BEGIN
+        SELECT 'Cannot assign a direct report as manager' AS Message;
+        RETURN;
+    END
 
-                RETURN;
+    UPDATE Employee
+    SET
+        department_id = @NewDepartmentID,
+        manager_id = @NewManagerID
+    WHERE employee_id = @EmployeeID;
 
-            END
-        IF @EmployeeID = @NewManagerID
-            BEGIN
-                SELECT 'Employee cannot be their own manager' AS Message;
+    DELETE FROM EmployeeHierarchy WHERE employee_id = @EmployeeID;
 
-                RETURN;
+    IF @NewManagerID IS NOT NULL
+    BEGIN
+        INSERT INTO EmployeeHierarchy (employee_id, manager_id, hierarchy_level)
+        VALUES (@EmployeeID, @NewManagerID, 1);
+    END
 
-            END
-
-        UPDATE
-            Employee
-        SET department_id = @NewDepartmentID,
-            manager_id    = @NewManagerID
-        WHERE employee_id = @EmployeeID;
-
-        IF EXISTS (SELECT 1
-                   FROM EmployeeHierarchy
-                   WHERE employee_id = @EmployeeID)
-            UPDATE
-                EmployeeHierarchy
-            SET manager_id = @NewManagerID
-            WHERE employee_id = @EmployeeID;
-
-        SELECT 'Employee hierarchy updated successfully' AS Message;
-
+    SELECT 'Employee hierarchy updated successfully' AS Message;
 END;
 
 GO
@@ -318,56 +314,43 @@ CREATE PROCEDURE NotifyStructureChange
     @Message VARCHAR(200) 
 AS
 BEGIN
-    IF @AffectedEmployees IS NULL OR @Message IS NULL
+    SET NOCOUNT ON;
+
+    IF @AffectedEmployees IS NULL OR @Message IS NULL OR LTRIM(RTRIM(@AffectedEmployees)) = ''
     BEGIN
         SELECT 'Affected employees and message are required' AS Message;
         RETURN;
     END
 
     DECLARE @NotificationID INT;
-
     INSERT INTO Notification (message_content, urgency, notification_type)
     VALUES (@Message, 'High', 'Structure Change');
-
     SET @NotificationID = SCOPE_IDENTITY();
 
-    DECLARE @EmployeeID INT;
+    DECLARE @EmployeeList VARCHAR(500) = LTRIM(RTRIM(@AffectedEmployees)) + ',';
     DECLARE @Position INT;
-    DECLARE @EmployeeList VARCHAR(500);
+    DECLARE @CurrentItem VARCHAR(50);
+    DECLARE @EmployeeID INT;
 
-    SET @EmployeeList = @AffectedEmployees + ',';
-
-    WHILE @EmployeeList <> ''
+    WHILE LEN(@EmployeeList) > 1
     BEGIN
         SET @Position = CHARINDEX(',', @EmployeeList);
-        
-        IF @Position > 0
+        IF @Position = 0 BREAK;
+
+        SET @CurrentItem = LTRIM(RTRIM(LEFT(@EmployeeList, @Position - 1)));
+        SET @EmployeeList = RIGHT(@EmployeeList, LEN(@EmployeeList) - @Position);
+
+        IF @CurrentItem = ''
+            CONTINUE;
+
+        IF TRY_CAST(@CurrentItem AS INT) IS NOT NULL
         BEGIN
-            SET @EmployeeID = CAST(LEFT(@EmployeeList, @Position - 1) AS INT);
-            
-            IF EXISTS (SELECT 1 
-                       FROM Employee 
-                       WHERE employee_id = @EmployeeID)
+            SET @EmployeeID = CAST(@CurrentItem AS INT);
+            IF @EmployeeID > 0 AND EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
             BEGIN
-                INSERT INTO Employee_Notification (
-                    employee_id,
-                    notification_id,
-                    delivery_status,
-                    delivered_at
-                )
-                VALUES (
-                    @EmployeeID,
-                    @NotificationID,
-                    'Pending',
-                    GETDATE()
-                );
+                INSERT INTO Employee_Notification (employee_id, notification_id, delivery_status, delivered_at)
+                VALUES (@EmployeeID, @NotificationID, 'Pending', GETDATE());
             END
-            
-            SET @EmployeeList = RIGHT(@EmployeeList, LEN(@EmployeeList) - @Position);
-        END
-        ELSE
-        BEGIN
-            SET @EmployeeList = '';
         END
     END
 
@@ -375,44 +358,64 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE ViewOrgHierarchy AS
+CREATE PROCEDURE ViewOrgHierarchy
+AS
 BEGIN
-    SELECT e.employee_id,
-           e.full_name                   AS employee_name,
-           m.full_name                   AS manager_name,
-           d.department_name,
-           p.position_title,
-           ISNULL(eh.hierarchy_level, 1) AS hierarchy_level
-    FROM Employee e
-             LEFT JOIN Employee m ON e.manager_id = m.employee_id
-             LEFT JOIN Department d ON e.department_id = d.department_id
-             LEFT JOIN Position p ON e.position_id = p.position_id
-             LEFT JOIN EmployeeHierarchy eh ON e.employee_id = eh.employee_id
-        AND e.manager_id = eh.manager_id
-    ORDER BY hierarchy_level,
-             d.department_name;
+    SET NOCOUNT ON;
 
+    SELECT
+        e.employee_id,
+        e.full_name AS employee_name,
+        m.full_name AS manager_name,
+        d.department_name,
+        p.position_title,
+        ISNULL(eh.hierarchy_level, 1) AS hierarchy_level
+    FROM Employee e
+    LEFT JOIN Employee m ON e.manager_id = m.employee_id
+    LEFT JOIN Department d ON e.department_id = d.department_id
+    LEFT JOIN Position p ON e.position_id = p.position_id
+    LEFT JOIN EmployeeHierarchy eh ON e.employee_id = eh.employee_id AND e.manager_id = eh.manager_id
+    ORDER BY hierarchy_level, d.department_name;
 END;
 
 GO
-CREATE PROCEDURE AssignShiftToEmployee @EmployeeID INT,
-                                       @ShiftID INT,
-                                       @StartDate DATE,
-                                       @EndDate DATE AS
+CREATE PROCEDURE AssignShiftToEmployee
+    @EmployeeID INT,
+    @ShiftID INT,
+    @StartDate DATE,
+    @EndDate DATE
+AS
 BEGIN
-    INSERT INTO ShiftAssignment (employee_id,
-                                 shift_id,
-                                 start_date,
-                                 end_date,
-                                 STATUS)
-    VALUES (@EmployeeID,
-            @ShiftID,
-            @StartDate,
-            @EndDate,
-            'Active');
+    SET NOCOUNT ON;
+
+    IF @EmployeeID IS NULL OR @ShiftID IS NULL OR @StartDate IS NULL
+    BEGIN
+        SELECT 'EmployeeID, ShiftID, and StartDate are required' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
+    BEGIN
+        SELECT 'Employee not found' AS Message;
+        RETURN;
+    END
+
+    IF NOT EXISTS (SELECT 1 FROM ShiftSchedule WHERE shift_id = @ShiftID)
+    BEGIN
+        SELECT 'Shift not found' AS Message;
+        RETURN;
+    END
+
+    IF @EndDate IS NOT NULL AND @EndDate < @StartDate
+    BEGIN
+        SELECT 'End date cannot be earlier than start date' AS Message;
+        RETURN;
+    END
+
+    INSERT INTO ShiftAssignment (employee_id, shift_id, start_date, end_date, STATUS)
+    VALUES (@EmployeeID, @ShiftID, @StartDate, @EndDate, 'Active');
 
     SELECT 'Shift assigned successfully' AS Message;
-
 END;
 
 GO
