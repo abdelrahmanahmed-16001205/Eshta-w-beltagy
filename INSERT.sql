@@ -619,19 +619,15 @@ VALUES
 ('Eid al-Adha', 'Holiday', '2025-06-06', 'Active'),
 ('System Maintenance', 'Special', '2025-11-30', 'Active');
 
-INSERT INTO ShiftAssignment (employee_id,
-                             shift_id,
-                             start_date,
-                             end_date,
-                             STATUS,
-                             exception_id)
-VALUES (3, 1, '2024-01-15', NULL, 'Active', NULL),
-       (4, 1, '2024-03-01', NULL, 'Active', NULL),
-       (5, 4, '2024-02-10', NULL, 'Active', NULL),
-       (6, 1, '2024-04-20', NULL, 'Active', NULL),
-       (7, 2, '2024-06-01', '2025-06-01', 'Active', NULL),
-       (9, 1, '2024-07-01', '2024-12-31', 'Active', NULL),
-       (10, 1, '2024-08-01', NULL, 'Active', NULL);
+INSERT INTO ShiftAssignment (employee_id, shift_id, start_date, end_date, STATUS)
+VALUES
+(3, 1, '2024-01-15', NULL, 'Active'),
+(4, 1, '2024-03-01', NULL, 'Active'),
+(5, 4, '2024-02-10', NULL, 'Active'),
+(6, 1, '2024-04-20', NULL, 'Active'),
+(7, 2, '2024-06-01', '2025-06-01', 'Active'),
+(9, 1, '2024-07-01', '2024-12-31', 'Active'),
+(10, 1, '2024-08-01', NULL, 'Active');
 
 INSERT INTO ShiftCycle (cycle_name, description)
 VALUES ('Rotational Weekly',
@@ -730,9 +726,9 @@ VALUES (3,
         NULL,
         NULL);
 
-INSERT INTO AttendanceLog (attendance_log_id, attendance_id, actor, timestamp, reason)
-VALUES (1, 7, 5, GETDATE(), 'Late arrival - traffic jam approved by manager'),
-       (2, 8, 5, GETDATE(), 'Missed clock out - system corrected by manager');
+INSERT INTO AttendanceLog (attendance_id, actor, timestamp, reason)
+VALUES (7, 5, GETDATE(), 'Late arrival - traffic jam approved by manager'),
+       (8, 5, GETDATE(), 'Missed clock out - system corrected by manager');
 
 INSERT INTO AttendanceCorrectionRequest (employee_id,
                                          date,
@@ -1056,16 +1052,15 @@ VALUES (2, 1, 2),
        (9, 6, 4),
        (10, 2, 3);
 
-INSERT INTO ApprovalWorkflow (workflow_id,
-                              workflow_type,
+INSERT INTO ApprovalWorkflow (workflow_type,
                               threshold_amount,
                               approver_role,
                               created_by,
                               STATUS)
-VALUES (1, 'Leave Request', NULL, 'Line Manager', 2, 'Active'),
-       (2, 'Reimbursement', 1000.00, 'HR Administrator', 2, 'Active'),
-       (3, 'Payroll Adjustment', 5000.00, 'Payroll Officer', 4, 'Active'),
-       (4, 'Contract Approval', NULL, 'HR Administrator', 2, 'Active');
+VALUES ('Leave Request', NULL, 'Line Manager', 2, 'Active'),
+       ('Reimbursement', 1000.00, 'HR Administrator', 2, 'Active'),
+       ('Payroll Adjustment', 5000.00, 'Payroll Officer', 4, 'Active'),
+       ('Contract Approval', NULL, 'HR Administrator', 2, 'Active');
 
 INSERT INTO ApprovalWorkflowStep (workflow_id,
                                   step_number,
@@ -1100,4 +1095,3 @@ VALUES (6,
         'Ready for more responsibility in contract management.',
 
         '2025-11-12 11:00:00');
-
