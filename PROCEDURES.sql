@@ -1137,22 +1137,91 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE UpdateEmployeeProfile @EmployeeID INT,
-                                       @FieldName VARCHAR(50),
-                                       @NewValue VARCHAR(255) AS
+CREATE PROCEDURE UpdateEmployeeProfile
+    @EmployeeID INT,
+    @FieldName VARCHAR(50),
+    @NewValue VARCHAR(255)
+AS
 BEGIN
+    IF NOT EXISTS (SELECT 1 FROM Employee WHERE employee_id = @EmployeeID)
+    BEGIN
+        SELECT 'Employee not found' AS Message;
+        RETURN;
+    END
 
-
-    SET
-        @SQL = 'UPDATE Employee SET ' + QUOTENAME(@FieldName) + ' = @Value WHERE employee_id = @EmpID';
-
-    EXEC sp_executesql @SQL,
-         N'@Value VARCHAR(255), @EmpID INT',
-         @NewValue,
-         @EmployeeID;
+    IF @FieldName = 'first_name'
+    BEGIN
+        UPDATE Employee SET first_name = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'last_name'
+    BEGIN
+        UPDATE Employee SET last_name = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'email'
+    BEGIN
+        IF EXISTS (SELECT 1 FROM Employee WHERE email = @NewValue AND employee_id != @EmployeeID)
+        BEGIN
+            SELECT 'Email already exists' AS Message;
+            RETURN;
+        END
+        UPDATE Employee SET email = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'phone'
+    BEGIN
+        UPDATE Employee SET phone = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'address'
+    BEGIN
+        UPDATE Employee SET address = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'national_id'
+    BEGIN
+        IF EXISTS (SELECT 1 FROM Employee WHERE national_id = @NewValue AND employee_id != @EmployeeID)
+        BEGIN
+            SELECT 'National ID already exists' AS Message;
+            RETURN;
+        END
+        UPDATE Employee SET national_id = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'country_of_birth'
+    BEGIN
+        UPDATE Employee SET country_of_birth = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'emergency_contact_name'
+    BEGIN
+        UPDATE Employee SET emergency_contact_name = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'emergency_contact_phone'
+    BEGIN
+        UPDATE Employee SET emergency_contact_phone = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'relationship'
+    BEGIN
+        UPDATE Employee SET relationship = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'biography'
+    BEGIN
+        UPDATE Employee SET biography = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'employment_progress'
+    BEGIN
+        UPDATE Employee SET employment_progress = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'account_status'
+    BEGIN
+        UPDATE Employee SET account_status = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE IF @FieldName = 'employment_status'
+    BEGIN
+        UPDATE Employee SET employment_status = @NewValue WHERE employee_id = @EmployeeID;
+    END
+    ELSE
+    BEGIN
+        SELECT 'Invalid field name' AS Message;
+        RETURN;
+    END
 
     SELECT 'Employee profile updated successfully' AS Message;
-
 END;
 
 GO
@@ -1169,18 +1238,73 @@ BEGIN
 END;
 
 GO
-CREATE PROCEDURE GenerateProfileReport @FilterField VARCHAR(50),
-                                       @FilterValue VARCHAR(100) AS
+CREATE PROCEDURE GenerateProfileReport
+    @FilterField VARCHAR(50),
+    @FilterValue VARCHAR(100)
+AS
 BEGIN
-    DECLARE @SQL NVARCHAR(MAX);
+    IF @FilterField = 'department'
+    BEGIN
+        SELECT e.employee_id, e.full_name, e.email, e.phone, d.department_name
+        FROM Employee e, Department d
+        WHERE e.department_id = d.department_id
+          AND d.department_name = @FilterValue;
+    END
+    ELSE IF @FilterField = 'employment_status'
+    BEGIN
+        SELECT employee_id, full_name, email, phone, employment_status
+        FROM Employee
+        WHERE employment_status = @FilterValue;
+    END
+    ELSE IF @FilterField = 'country_of_birth'
+    BEGIN
+        SELECT employee_id, full_name, email, phone, country_of_birth
+        FROM Employee
+        WHERE country_of_birth = @FilterValue;
+    END
+    ELSE IF @FilterField = 'gender'
+    BEGIN
+        SELECT employee_id, full_name, email, phone, gender
+        FROM Employee
+        WHERE gender = @FilterValue;
+    END
+    ELSE
+    BEGIN
+        SELECT 'Unsupported filter field. Use: department, employment_status, country_of_birth, or gender.' AS Message;
+    END
+END;
 
-    SET
-        @SQL = 'SELECT * FROM Employee WHERE ' + QUOTENAME(@FilterField) + ' = @Value';
+CREATE PROCEDURE CreateShiftType
+    @Name VARCHAR(100),
+    @Type VARCHAR(50),
+    @Start_Time TIME,
+    @End_Time TIME,
+    @Break_Duration INT = NULL,
+    @Status VARCHAR(50) = 'Active'
+AS
+BEGIN
+    IF @Type NOT IN ('Normal', 'Split', 'Overnight', 'Mission', 'Flexible', 'Weekend', 'Holiday')
+    BEGIN
+        SELECT 'Invalid shift type. Allowed: Normal, Split, Overnight, Mission, Flexible, Weekend, Holiday' AS Message;
+        RETURN;
+    END
 
-    EXEC sp_executesql @SQL,
-         N'@Value VARCHAR(100)',
-         @FilterValue;
+    IF @Start_Time >= @End_Time AND @Type <> 'Overnight'
+    BEGIN
+        SELECT 'Start time must be before end time for non-overnight shifts.' AS Message;
+        RETURN;
+    END
 
+    IF @Status NOT IN ('Active', 'Inactive', 'Archived')
+    BEGIN
+        SELECT 'Invalid status. Allowed: Active, Inactive, Archived' AS Message;
+        RETURN;
+    END
+
+    INSERT INTO ShiftSchedule (name, type, start_time, end_time, break_duration, status)
+    VALUES (@Name, @Type, @Start_Time, @End_Time, @Break_Duration, @Status);
+
+    SELECT 'Shift type created successfully' AS Message;
 END;
 
 GO
@@ -4083,12 +4207,3 @@ BEGIN
     SELECT 'Leave status notification sent' AS Message;
 
 END;
-
-
-GO
-
-
-
-
-
-
