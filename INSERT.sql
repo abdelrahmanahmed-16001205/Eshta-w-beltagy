@@ -745,22 +745,19 @@ INSERT INTO AttendanceCorrectionRequest (employee_id,
                                          correction_type,
                                          reason,
                                          STATUS,
-                                         recorded_by,
-                                         attendance_id)
+                                         recorded_by)
 VALUES (6,
         '2025-11-21',
         'Missed Clock Out',
         'Forgot to clock out, left at 16:00',
         'Pending',
-        6,
-        8),
+        6),
        (4,
         '2025-11-21',
         'Late Arrival',
         'Traffic due to accident on highway',
         'Approved',
-        4,
-        7);
+        4);
 
 INSERT INTO Device (device_type,
                     terminal_id,
@@ -1122,4 +1119,5 @@ VALUES (6,
        (10,
         2,
         'Ready for more responsibility in contract management.',
+
         '2025-11-12 11:00:00');
