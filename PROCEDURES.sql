@@ -4455,7 +4455,3 @@ BEGIN
 
     SELECT 'Leave status notification sent' AS Message;
 END;
-
-
-
-
